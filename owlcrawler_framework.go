@@ -3,8 +3,11 @@
 package main
 
 import (
+	"bytes"
+	"encoding/gob"
 	"flag"
 	"fmt"
+	"github.com/iron-io/iron_go/mq"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -87,8 +90,14 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 		remainingCpus := cpus
 		remainingMems := mems
 
+		queue := mq.New("urls_to_fetch")
+		msg, err := queue.Get()
+		if err != nil {
+			log.Errorf("\n\n\n\nError while getting a msg from the queue, got: %v\n", err)
+		}
+
 		var tasks []*mesos.TaskInfo
-		for sched.tasksLaunched < sched.totalTasks &&
+		for err == nil &&
 			CPUS_PER_TASK <= remainingCpus &&
 			MEM_PER_TASK <= remainingMems {
 
@@ -96,6 +105,12 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 
 			taskId := &mesos.TaskID{
 				Value: proto.String(strconv.Itoa(sched.tasksLaunched)),
+			}
+			var msgAndID bytes.Buffer
+			enc := gob.NewEncoder(&msgAndID)
+			err := enc.Encode(QueueMsg{msg.Body, msg.Id})
+			if err != nil {
+				log.Fatal("encode error:", err)
 			}
 
 			task := &mesos.TaskInfo{
@@ -107,6 +122,7 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 					util.NewScalarResource("cpus", CPUS_PER_TASK),
 					util.NewScalarResource("mem", MEM_PER_TASK),
 				},
+				Data: msgAndID.Bytes(),
 			}
 			log.Infof("Prepared task: %s with offer %s for launch\n", task.GetName(), offer.Id.GetValue())
 
@@ -248,4 +264,9 @@ func main() {
 		log.Infof("Framework stopped with status %s and error: %s\n", stat.String(), err.Error())
 	}
 
+}
+
+type QueueMsg struct {
+	URL string
+	ID  string
 }

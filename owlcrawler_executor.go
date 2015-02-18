@@ -3,6 +3,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/gob"
 	"flag"
 	"fmt"
 	"github.com/iron-io/iron_go/mq"
@@ -10,7 +12,6 @@ import (
 	mesos "github.com/mesos/mesos-go/mesosproto"
 	"io/ioutil"
 	"net/http"
-	"os"
 )
 
 type exampleExecutor struct {
@@ -51,29 +52,42 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	// this is where one would perform the requested task
 	//
 
+	//read Data here
+
 	queue := mq.New("urls_to_fetch")
-	msg, err := queue.Get()
+
+	payload := bytes.NewReader(taskInfo.GetData())
+	var msgAndID QueueMsg
+	dec := gob.NewDecoder(payload)
+	err = dec.Decode(&msgAndID)
 	if err != nil {
-		fmt.Printf("\n\n\n\nError while getting a msg from the queue, got: %v", err)
-		updateStatusDied(driver, taskInfo)
-		os.Exit(1)
+		fmt.Println("decode error:", err)
 	}
 
-	resp, err := http.Get(msg.Body)
+	resp, err := http.Get(msgAndID.URL)
 	if err != nil {
-		fmt.Printf("\n\n\n\nError while fetching url: %s, got error: %v", msg.Body, err)
-		msg.Release(0)
+		fmt.Printf("\n\n\n\nError while fetching url: %s, got error: %v\n", msgAndID.URL, err)
+		err = queue.ReleaseMessage(msgAndID.ID, 0)
+		if err != nil {
+			fmt.Printf("Error releasing message id: %s from queue, got: %v\n", msgAndID.ID, err)
+		}
 		updateStatusDied(driver, taskInfo)
-		os.Exit(1)
+		return
 	}
 	html, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("\n\n\n\nError while reading html for url: %s, got error: %v", msg.Body, err)
-		msg.Release(0)
+		fmt.Printf("\n\n\n\nError while reading html for url: %s, got error: %v\n", msgAndID.URL, err)
+		err = queue.ReleaseMessage(msgAndID.ID, 0)
+		if err != nil {
+			fmt.Printf("Error releasing message id: %s from queue, got: %v\n", msgAndID.ID, err)
+		}
 		updateStatusDied(driver, taskInfo)
-		os.Exit(1)
+		return
 	}
-	msg.Delete()
+	err = queue.DeleteMessage(msgAndID.ID)
+	if err != nil {
+		fmt.Printf("Error deleting message id: %s from queue, got: %v\n", msgAndID.ID, err)
+	}
 	fmt.Println(html)
 	// finish task
 	fmt.Println("Finishing task", taskInfo.GetName())
@@ -137,4 +151,9 @@ func updateStatusDied(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
 		fmt.Printf("Failed to tell mesos that we died, sorry, got: %v", err)
 	}
 
+}
+
+type QueueMsg struct {
+	URL string
+	ID  string
 }
