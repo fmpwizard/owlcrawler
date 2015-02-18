@@ -52,10 +52,6 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	// this is where one would perform the requested task
 	//
 
-	//read Data here
-
-	queue := mq.New("urls_to_fetch")
-
 	payload := bytes.NewReader(taskInfo.GetData())
 	var msgAndID QueueMsg
 	dec := gob.NewDecoder(payload)
@@ -63,7 +59,7 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	if err != nil {
 		fmt.Println("decode error:", err)
 	}
-
+	queue := mq.New(msgAndID.QueueName)
 	resp, err := http.Get(msgAndID.URL)
 	if err != nil {
 		fmt.Printf("\n\n\n\nError while fetching url: %s, got error: %v\n", msgAndID.URL, err)
@@ -154,6 +150,7 @@ func updateStatusDied(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
 }
 
 type QueueMsg struct {
-	URL string
-	ID  string
+	URL       string
+	ID        string
+	QueueName string
 }

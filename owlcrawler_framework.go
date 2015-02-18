@@ -34,8 +34,9 @@ var (
 	mesosAuthPrincipal  = flag.String("mesos_authentication_principal", "", "Mesos authentication principal.")
 	mesosAuthSecretFile = flag.String("mesos_authentication_secret_file", "", "Mesos authentication secret file.")
 )
+var queueName = "urls_to_fetch"
 
-var queue = mq.New("urls_to_fetch")
+var queue = mq.New(queueName)
 
 type ExampleScheduler struct {
 	executor      *mesos.ExecutorInfo
@@ -102,7 +103,11 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 			}
 			var msgAndID bytes.Buffer
 			enc := gob.NewEncoder(&msgAndID)
-			err = enc.Encode(QueueMsg{msg.Body, msg.Id})
+			err = enc.Encode(QueueMsg{
+				URL:       msg.Body,
+				ID:        msg.Id,
+				QueueName: queueName,
+			})
 			if err != nil {
 				log.Fatal("encode error:", err)
 			}
@@ -261,6 +266,7 @@ func main() {
 }
 
 type QueueMsg struct {
-	URL string
-	ID  string
+	URL       string
+	ID        string
+	QueueName string
 }
