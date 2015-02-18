@@ -5,5 +5,4 @@ go build -tags=test-exec -o owlcrawler-executor owlcrawler_executor.go && \
 ./owlcrawler-framework \
 --master=127.0.0.1:5050 \
 --executor="owlcrawler-executor" \
---logtostderr=true  \
--task-count=2
+--logtostderr=true

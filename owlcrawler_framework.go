@@ -31,28 +31,23 @@ var (
 	artifactPort        = flag.Int("artifactPort", defaultArtifactPort, "Binding port for artifact server")
 	master              = flag.String("master", "127.0.0.1:5050", "Master address <ip:port>")
 	executorPath        = flag.String("executor", "./test_executor", "Path to test executor")
-	taskCount           = flag.String("task-count", "5", "Total task count to run.")
 	mesosAuthPrincipal  = flag.String("mesos_authentication_principal", "", "Mesos authentication principal.")
 	mesosAuthSecretFile = flag.String("mesos_authentication_secret_file", "", "Mesos authentication secret file.")
 )
+
+var queue = mq.New("urls_to_fetch")
 
 type ExampleScheduler struct {
 	executor      *mesos.ExecutorInfo
 	tasksLaunched int
 	tasksFinished int
-	totalTasks    int
 }
 
 func newExampleScheduler(exec *mesos.ExecutorInfo) *ExampleScheduler {
-	total, err := strconv.Atoi(*taskCount)
-	if err != nil {
-		total = 5
-	}
 	return &ExampleScheduler{
 		executor:      exec,
 		tasksLaunched: 0,
 		tasksFinished: 0,
-		totalTasks:    total,
 	}
 }
 
@@ -90,7 +85,6 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 		remainingCpus := cpus
 		remainingMems := mems
 
-		queue := mq.New("urls_to_fetch")
 		msg, err := queue.Get()
 		if err != nil {
 			log.Errorf("\n\n\n\nError while getting a msg from the queue, got: %v\n", err)
@@ -108,7 +102,7 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 			}
 			var msgAndID bytes.Buffer
 			enc := gob.NewEncoder(&msgAndID)
-			err := enc.Encode(QueueMsg{msg.Body, msg.Id})
+			err = enc.Encode(QueueMsg{msg.Body, msg.Id})
 			if err != nil {
 				log.Fatal("encode error:", err)
 			}
@@ -129,6 +123,11 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 			tasks = append(tasks, task)
 			remainingCpus -= CPUS_PER_TASK
 			remainingMems -= MEM_PER_TASK
+			msg, err = queue.Get()
+			if err != nil {
+				log.Errorf("\n\n\n\nError while getting a msg from the queue, got: %v\n", err)
+			}
+
 		}
 		log.Infoln("Launching ", len(tasks), "tasks for offer", offer.Id.GetValue())
 		driver.LaunchTasks([]*mesos.OfferID{offer.Id}, tasks, &mesos.Filters{RefuseSeconds: proto.Float64(1)})
@@ -139,11 +138,6 @@ func (sched *ExampleScheduler) StatusUpdate(driver sched.SchedulerDriver, status
 	log.Infoln("Status update: task", status.TaskId.GetValue(), " is in state ", status.State.Enum().String())
 	if status.GetState() == mesos.TaskState_TASK_FINISHED {
 		sched.tasksFinished++
-	}
-
-	if sched.tasksFinished >= sched.totalTasks {
-		log.Infoln("Total tasks completed, stopping framework.")
-		driver.Stop(false)
 	}
 
 	if status.GetState() == mesos.TaskState_TASK_LOST ||
