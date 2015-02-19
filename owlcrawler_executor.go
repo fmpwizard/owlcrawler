@@ -13,7 +13,6 @@ import (
 	"github.com/iron-io/iron_go/mq"
 	exec "github.com/mesos/mesos-go/executor"
 	mesos "github.com/mesos/mesos-go/mesosproto"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -30,6 +29,7 @@ type QueueMsg struct {
 	URL       string
 	ID        string
 	QueueName string
+	EtcdHost  string
 }
 
 type dataStore struct {
@@ -75,11 +75,6 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	//
 	// this is where one would perform the requested task
 	//
-	etcdClient := etcd.NewClient([]string{"127.0.0.1:2379/"})
-	ret := etcdClient.SyncCluster()
-	if !ret {
-		fmt.Println("Error: problem sync'ing with etcd server")
-	}
 	payload := bytes.NewReader(taskInfo.GetData())
 	var msgAndID QueueMsg
 	dec := gob.NewDecoder(payload)
@@ -99,8 +94,9 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 		return
 	}
 	defer resp.Body.Close()
-
 	htmlData, err := ioutil.ReadAll(resp.Body)
+	parseHTML(htmlData, msgAndID.URL, queue)
+
 	if err != nil {
 		fmt.Printf("\n\n\n\nError while reading html for url: %s, got error: %v\n", msgAndID.URL, err)
 		err = queue.ReleaseMessage(msgAndID.ID, 0)
@@ -120,13 +116,18 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 		HTML: string(htmlData[:]),
 		Date: time.Now().UTC(),
 	}
+	etcdClient := etcd.NewClient([]string{msgAndID.EtcdHost})
+	ret := etcdClient.SyncCluster()
+	if !ret {
+		fmt.Println("Error: problem sync'ing with etcd server")
+	}
 	_, err = etcdClient.Set(encodedURL, data.String(), 0)
 	if err != nil {
 		fmt.Printf("Got error adding html to etcd, got: %v\n", err)
 	}
 	fmt.Printf("\n\n\nhtml url is %s\n\n\n", msgAndID.URL)
 	fmt.Printf("\n\n\nhtml encodedURL is %s\n\n\n", encodedURL)
-	parseHTML(resp.Body, msgAndID.URL, queue)
+
 	// finish task
 	fmt.Println("Finishing task", taskInfo.GetName())
 	finStatus := &mesos.TaskStatus{
@@ -191,18 +192,18 @@ func updateStatusDied(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
 
 }
 
-func parseHTML(r io.Reader, originalURL string, q *mq.Queue) {
-
+func parseHTML(data []byte, originalURL string, q *mq.Queue) {
 	link, err := url.Parse(originalURL)
 	if err != nil {
-		fmt.Printf("Error parsing url %s, got: %v", originalURL, err)
+		fmt.Printf("Error parsing url %s, got: %v\n", originalURL, err)
 	}
 
-	d := html.NewTokenizer(r)
+	d := html.NewTokenizer(bytes.NewReader(data))
 
 	for {
 		tokenType := d.Next()
 		if tokenType == html.ErrorToken {
+			fmt.Printf("ERROR: error reading token %v\n", tokenType)
 			return
 		}
 		token := d.Token()

@@ -23,21 +23,21 @@ import (
 )
 
 const (
-	cpuPerTask          = 0.5
-	memPerTask          = 128
-	defaultArtifactPort = 12345
+	cpuPerTask = 0.5
+	memPerTask = 128
 )
 
 var (
 	address             = flag.String("address", "127.0.0.1", "Binding address for artifact server")
-	artifactPort        = flag.Int("artifactPort", defaultArtifactPort, "Binding port for artifact server")
+	etcHostAndport      = flag.String("etcdAddress", "127.0.0.1:2379", "Binding address for artifact server")
+	artifactPort        = flag.Int("artifactPort", 12345, "Binding port for artifact server")
 	master              = flag.String("master", "127.0.0.1:5050", "Master address <ip:port>")
 	executorPath        = flag.String("executor", "./test_executor", "Path to test executor")
 	mesosAuthPrincipal  = flag.String("mesos_authentication_principal", "", "Mesos authentication principal.")
 	mesosAuthSecretFile = flag.String("mesos_authentication_secret_file", "", "Mesos authentication secret file.")
 )
 
-var etcdClient = etcd.NewClient([]string{"127.0.0.1:2379/"})
+var etcdClient = etcd.NewClient([]string{*etcHostAndport})
 
 //ExampleScheduler Basic scheduler
 type ExampleScheduler struct {
@@ -131,6 +131,7 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 				URL:       msg.Body,
 				ID:        msg.Id,
 				QueueName: queueName,
+				EtcdHost:  *etcHostAndport,
 			})
 			if err != nil {
 				log.Fatal("encode error:", err)
@@ -314,4 +315,5 @@ type QueueMsg struct {
 	URL       string
 	ID        string
 	QueueName string
+	EtcdHost  string
 }
