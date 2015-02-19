@@ -24,7 +24,7 @@ import (
 
 const (
 	cpuPerTask          = 0.5
-	memPerTask        = 128
+	memPerTask          = 128
 	defaultArtifactPort = 12345
 )
 
@@ -192,7 +192,8 @@ func (sched *ExampleScheduler) OfferRescinded(sched.SchedulerDriver, *mesos.Offe
 // FrameworkMessage is invoked when an executor sends a message. These messages are best
 // effort; do not expect a framework message to be retransmitted in
 // any reliable fashion.
-func (sched *ExampleScheduler) FrameworkMessage(sched.SchedulerDriver, *mesos.ExecutorID, *mesos.SlaveID, string) {}
+func (sched *ExampleScheduler) FrameworkMessage(sched.SchedulerDriver, *mesos.ExecutorID, *mesos.SlaveID, string) {
+}
 
 //SlaveLost is invoked when a slave has been determined unreachable (e.g.,
 // machine failure, network partition). Most frameworks will need to
@@ -202,7 +203,8 @@ func (sched *ExampleScheduler) SlaveLost(sched.SchedulerDriver, *mesos.SlaveID) 
 //ExecutorLost is invoked when an executor has exited/terminated. Note that any
 // tasks running will have TASK_LOST status updates automagically
 // generated.
-func (sched *ExampleScheduler) ExecutorLost(sched.SchedulerDriver, *mesos.ExecutorID, *mesos.SlaveID, int) {}
+func (sched *ExampleScheduler) ExecutorLost(sched.SchedulerDriver, *mesos.ExecutorID, *mesos.SlaveID, int) {
+}
 
 //Error is invoked when there is an unrecoverable error in the scheduler or
 // scheduler driver. The driver will be aborted BEFORE invoking this
