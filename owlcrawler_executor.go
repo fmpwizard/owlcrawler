@@ -4,9 +4,11 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/gob"
 	"flag"
 	"fmt"
+	"github.com/coreos/go-etcd/etcd"
 	"github.com/iron-io/iron_go/mq"
 	exec "github.com/mesos/mesos-go/executor"
 	mesos "github.com/mesos/mesos-go/mesosproto"
@@ -51,7 +53,11 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	//
 	// this is where one would perform the requested task
 	//
-
+	etcdClient := etcd.NewClient([]string{"127.0.0.1:2379/"})
+	ret := etcdClient.SyncCluster()
+	if !ret {
+		fmt.Println("\n\n\n\n Got problem \n\n\n\n")
+	}
 	payload := bytes.NewReader(taskInfo.GetData())
 	var msgAndID QueueMsg
 	dec := gob.NewDecoder(payload)
@@ -84,7 +90,13 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	if err != nil {
 		fmt.Printf("Error deleting message id: %s from queue, got: %v\n", msgAndID.ID, err)
 	}
-	fmt.Println(html)
+	encodedURL := base64.StdEncoding.EncodeToString([]byte(msgAndID.URL))
+	_, err = etcdClient.Set(encodedURL, "'url': '"+msgAndID.URL+"', 'html': '"+string(html[:])+"'", 0)
+	if err != nil {
+		fmt.Printf("Got error adding html to etcd, got: %v\n", err)
+	}
+	fmt.Printf("\n\n\nhtml url is %s\n\n\n", msgAndID.URL)
+	fmt.Printf("\n\n\nhtml encodedURL is %s\n\n\n", encodedURL)
 	// finish task
 	fmt.Println("Finishing task", taskInfo.GetName())
 	finStatus := &mesos.TaskStatus{

@@ -4,9 +4,11 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/gob"
 	"flag"
 	"fmt"
+	"github.com/coreos/go-etcd/etcd"
 	"github.com/iron-io/iron_go/mq"
 	"io/ioutil"
 	"net/http"
@@ -34,9 +36,8 @@ var (
 	mesosAuthPrincipal  = flag.String("mesos_authentication_principal", "", "Mesos authentication principal.")
 	mesosAuthSecretFile = flag.String("mesos_authentication_secret_file", "", "Mesos authentication secret file.")
 )
-var queueName = "urls_to_fetch"
 
-var queue = mq.New(queueName)
+var etcdClient = etcd.NewClient([]string{"127.0.0.1:2379/"})
 
 type ExampleScheduler struct {
 	executor      *mesos.ExecutorInfo
@@ -63,6 +64,8 @@ func (sched *ExampleScheduler) Reregistered(driver sched.SchedulerDriver, master
 func (sched *ExampleScheduler) Disconnected(sched.SchedulerDriver) {}
 
 func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offers []*mesos.Offer) {
+	queueName := "urls_to_fetch"
+	queue := mq.New(queueName)
 
 	for _, offer := range offers {
 		cpuResources := util.FilterResources(offer.Resources, func(res *mesos.Resource) bool {
@@ -86,15 +89,31 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 		remainingCpus := cpus
 		remainingMems := mems
 
-		msg, err := queue.Get()
-		if err != nil {
-			log.Errorf("\n\n\n\nError while getting a msg from the queue, got: %v\n", err)
-		}
-
 		var tasks []*mesos.TaskInfo
-		for err == nil &&
-			CPUS_PER_TASK <= remainingCpus &&
+		for CPUS_PER_TASK <= remainingCpus &&
 			MEM_PER_TASK <= remainingMems {
+
+			//var resp *etcd.Response
+
+			msg, err := queue.Get()
+			if err != nil {
+				log.Errorf("\n\n\n\n=====> Error while getting a msg from the queue, got: %v\n\n\n", err)
+				break
+			} else {
+				ret := etcdClient.SyncCluster()
+				if !ret {
+					log.Infoln("\n\n\n\n Got problemSSS \n\n\n\n")
+				}
+				encodedURL := base64.StdEncoding.EncodeToString([]byte(msg.Body))
+				_, err := etcdClient.Get(encodedURL, false, false)
+				if err == nil { //found an entry, no need to fetch it again
+					log.Infof("\n\n\n\n Already fetched this url, remove from queue ============> %+v \n\n\n\n", encodedURL)
+					msg.Delete()
+					break
+				}
+				//log.Infof("\n\n\n\n Got result.Node.Key ============>%+v \n\n\n\n", result.Node.Key)
+
+			}
 
 			sched.tasksLaunched++
 
@@ -128,10 +147,6 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 			tasks = append(tasks, task)
 			remainingCpus -= CPUS_PER_TASK
 			remainingMems -= MEM_PER_TASK
-			msg, err = queue.Get()
-			if err != nil {
-				log.Errorf("\n\n\n\nError while getting a msg from the queue, got: %v\n", err)
-			}
 
 		}
 		log.Infoln("Launching ", len(tasks), "tasks for offer", offer.Id.GetValue())
