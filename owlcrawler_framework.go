@@ -97,17 +97,17 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 
 			msg, err := queue.Get()
 			if err != nil {
-				log.Errorf("\n\n\n\n=====> Error while getting a msg from the queue, got: %v\n\n\n", err)
+				//log.Errorf("\n\n\n\n=====> Error while getting a msg from the queue, got: %v\n\n\n", err)
 				break
 			} else {
 				ret := etcdClient.SyncCluster()
 				if !ret {
-					log.Infoln("\n\n\n\n Got problemSSS \n\n\n\n")
+					//log.Infoln("\n\n\n\n Got problemSSS \n\n\n\n")
 				}
 				encodedURL := base64.StdEncoding.EncodeToString([]byte(msg.Body))
 				_, err := etcdClient.Get(encodedURL, false, false)
 				if err == nil { //found an entry, no need to fetch it again
-					log.Infof("\n\n\n\n Already fetched this url, remove from queue ============> %+v \n\n\n\n", encodedURL)
+					//log.Infof("\n\n\n\n Already fetched this url, remove from queue ============> %+v \n\n\n\n", encodedURL)
 					msg.Delete()
 					break
 				}
@@ -142,14 +142,17 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 				},
 				Data: msgAndID.Bytes(),
 			}
-			log.Infof("Prepared task: %s with offer %s for launch\n", task.GetName(), offer.Id.GetValue())
+			//log.Infof("Prepared task: %s with offer %s for launch\n", task.GetName(), offer.Id.GetValue())
 
 			tasks = append(tasks, task)
 			remainingCpus -= CPUS_PER_TASK
 			remainingMems -= MEM_PER_TASK
 
 		}
-		log.Infoln("Launching ", len(tasks), "tasks for offer", offer.Id.GetValue())
+		if len(tasks) > 0 {
+			log.Infoln("Launching ", len(tasks), "tasks for offer", offer.Id.GetValue())
+		}
+
 		driver.LaunchTasks([]*mesos.OfferID{offer.Id}, tasks, &mesos.Filters{RefuseSeconds: proto.Float64(1)})
 	}
 }

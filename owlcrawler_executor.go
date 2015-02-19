@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"code.google.com/p/go.net/html"
 	"encoding/base64"
 	"encoding/gob"
 	"flag"
@@ -12,8 +13,11 @@ import (
 	"github.com/iron-io/iron_go/mq"
 	exec "github.com/mesos/mesos-go/executor"
 	mesos "github.com/mesos/mesos-go/mesosproto"
+	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -93,6 +97,8 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 		updateStatusDied(driver, taskInfo)
 		return
 	}
+	defer resp.Body.Close()
+	parseHtml(resp.Body, msgAndID.URL, queue)
 	html, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Printf("\n\n\n\nError while reading html for url: %s, got error: %v\n", msgAndID.URL, err)
@@ -181,4 +187,38 @@ func updateStatusDied(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
 		fmt.Printf("Failed to tell mesos that we died, sorry, got: %v", err)
 	}
 
+}
+
+func parseHtml(r io.Reader, originalURL string, q *mq.Queue) {
+
+	link, err := url.Parse(originalURL)
+	if err != nil {
+		fmt.Printf("Error parsing url %s, got: %v", originalURL, err)
+	}
+
+	d := html.NewTokenizer(r)
+
+	for {
+		tokenType := d.Next()
+		if tokenType == html.ErrorToken {
+			return
+		}
+		token := d.Token()
+		switch tokenType {
+		case html.StartTagToken:
+			for _, attribute := range token.Attr {
+				if attribute.Key == "href" {
+					if strings.HasPrefix(attribute.Val, "//") {
+						fmt.Printf("Found url: %s:%s\n", link.Scheme, attribute.Val)
+						q.PushString(fmt.Sprintf("%s:%s", link.Scheme, attribute.Val))
+					} else if strings.HasPrefix(attribute.Val, "/") {
+						fmt.Printf("Found url: %s://%s%s\n", link.Scheme, link.Host, attribute.Val)
+						q.PushString(fmt.Sprintf("%s://%s%s", link.Scheme, link.Host, attribute.Val))
+					} else {
+						fmt.Printf("Not sure what to do with this url: %s\n", attribute.Val)
+					}
+				}
+			}
+		}
+	}
 }
