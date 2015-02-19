@@ -14,10 +14,27 @@ import (
 	mesos "github.com/mesos/mesos-go/mesosproto"
 	"io/ioutil"
 	"net/http"
+	"time"
 )
 
 type exampleExecutor struct {
 	tasksLaunched int
+}
+
+type QueueMsg struct {
+	URL       string
+	ID        string
+	QueueName string
+}
+
+type dataStore struct {
+	URL  string
+	HTML string
+	Date time.Time
+}
+
+func (data *dataStore) String() string {
+	return "'url': '" + data.URL + "', 'html': '" + data.HTML + "' , 'date' : '" + data.Date.String() + "'"
 }
 
 func newExampleExecutor() *exampleExecutor {
@@ -91,7 +108,12 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 		fmt.Printf("Error deleting message id: %s from queue, got: %v\n", msgAndID.ID, err)
 	}
 	encodedURL := base64.StdEncoding.EncodeToString([]byte(msgAndID.URL))
-	_, err = etcdClient.Set(encodedURL, "'url': '"+msgAndID.URL+"', 'html': '"+string(html[:])+"'", 0)
+	data := dataStore{
+		URL:  msgAndID.URL,
+		HTML: string(html[:]),
+		Date: time.Now().UTC(),
+	}
+	_, err = etcdClient.Set(encodedURL, data.String(), 0)
 	if err != nil {
 		fmt.Printf("Got error adding html to etcd, got: %v\n", err)
 	}
@@ -159,10 +181,4 @@ func updateStatusDied(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
 		fmt.Printf("Failed to tell mesos that we died, sorry, got: %v", err)
 	}
 
-}
-
-type QueueMsg struct {
-	URL       string
-	ID        string
-	QueueName string
 }
