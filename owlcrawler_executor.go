@@ -1,4 +1,4 @@
-// +build test-exec
+// +build testExec
 
 package main
 
@@ -25,6 +25,7 @@ type exampleExecutor struct {
 	tasksLaunched int
 }
 
+//QueueMsg is used to decode the Data payload from the framework
 type QueueMsg struct {
 	URL       string
 	ID        string
@@ -77,7 +78,7 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	etcdClient := etcd.NewClient([]string{"127.0.0.1:2379/"})
 	ret := etcdClient.SyncCluster()
 	if !ret {
-		fmt.Println("\n\n\n\n Got problem \n\n\n\n")
+		fmt.Println("Error: problem sync'ing with etcd server")
 	}
 	payload := bytes.NewReader(taskInfo.GetData())
 	var msgAndID QueueMsg
@@ -125,7 +126,7 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	}
 	fmt.Printf("\n\n\nhtml url is %s\n\n\n", msgAndID.URL)
 	fmt.Printf("\n\n\nhtml encodedURL is %s\n\n\n", encodedURL)
-	parseHtml(resp.Body, msgAndID.URL, queue)
+	parseHTML(resp.Body, msgAndID.URL, queue)
 	// finish task
 	fmt.Println("Finishing task", taskInfo.GetName())
 	finStatus := &mesos.TaskStatus{
@@ -190,7 +191,7 @@ func updateStatusDied(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
 
 }
 
-func parseHtml(r io.Reader, originalURL string, q *mq.Queue) {
+func parseHTML(r io.Reader, originalURL string, q *mq.Queue) {
 
 	link, err := url.Parse(originalURL)
 	if err != nil {

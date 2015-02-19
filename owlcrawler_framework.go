@@ -1,4 +1,4 @@
-// +build test-sched
+// +build testSched
 
 package main
 
@@ -23,8 +23,8 @@ import (
 )
 
 const (
-	CPUS_PER_TASK       = 0.5
-	MEM_PER_TASK        = 128
+	cpuPerTask          = 0.5
+	memPerTask        = 128
 	defaultArtifactPort = 12345
 )
 
@@ -39,6 +39,7 @@ var (
 
 var etcdClient = etcd.NewClient([]string{"127.0.0.1:2379/"})
 
+//ExampleScheduler Basic scheduler
 type ExampleScheduler struct {
 	executor      *mesos.ExecutorInfo
 	tasksLaunched int
@@ -53,16 +54,20 @@ func newExampleScheduler(exec *mesos.ExecutorInfo) *ExampleScheduler {
 	}
 }
 
-func (sched *ExampleScheduler) Registered(driver sched.SchedulerDriver, frameworkId *mesos.FrameworkID, masterInfo *mesos.MasterInfo) {
+// Registered implements the Registered handler.
+func (sched *ExampleScheduler) Registered(driver sched.SchedulerDriver, frameworkID *mesos.FrameworkID, masterInfo *mesos.MasterInfo) {
 	log.Infoln("Framework Registered with Master ", masterInfo)
 }
 
+// Reregistered implements the Reregistered handler.
 func (sched *ExampleScheduler) Reregistered(driver sched.SchedulerDriver, masterInfo *mesos.MasterInfo) {
 	log.Infoln("Framework Re-Registered with Master ", masterInfo)
 }
 
+// Disconnected implements the Disconnected handler.
 func (sched *ExampleScheduler) Disconnected(sched.SchedulerDriver) {}
 
+//ResourceOffers is where yo udecide if you should use resources or not.
 func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offers []*mesos.Offer) {
 	queueName := "urls_to_fetch"
 	queue := mq.New(queueName)
@@ -90,8 +95,8 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 		remainingMems := mems
 
 		var tasks []*mesos.TaskInfo
-		for CPUS_PER_TASK <= remainingCpus &&
-			MEM_PER_TASK <= remainingMems {
+		for cpuPerTask <= remainingCpus &&
+			memPerTask <= remainingMems {
 
 			//var resp *etcd.Response
 
@@ -117,7 +122,7 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 
 			sched.tasksLaunched++
 
-			taskId := &mesos.TaskID{
+			taskID := &mesos.TaskID{
 				Value: proto.String(strconv.Itoa(sched.tasksLaunched)),
 			}
 			var msgAndID bytes.Buffer
@@ -132,21 +137,21 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 			}
 
 			task := &mesos.TaskInfo{
-				Name:     proto.String("go-task-" + taskId.GetValue()),
-				TaskId:   taskId,
+				Name:     proto.String("go-task-" + taskID.GetValue()),
+				TaskId:   taskID,
 				SlaveId:  offer.SlaveId,
 				Executor: sched.executor,
 				Resources: []*mesos.Resource{
-					util.NewScalarResource("cpus", CPUS_PER_TASK),
-					util.NewScalarResource("mem", MEM_PER_TASK),
+					util.NewScalarResource("cpus", cpuPerTask),
+					util.NewScalarResource("mem", memPerTask),
 				},
 				Data: msgAndID.Bytes(),
 			}
 			//log.Infof("Prepared task: %s with offer %s for launch\n", task.GetName(), offer.Id.GetValue())
 
 			tasks = append(tasks, task)
-			remainingCpus -= CPUS_PER_TASK
-			remainingMems -= MEM_PER_TASK
+			remainingCpus -= cpuPerTask
+			remainingMems -= memPerTask
 
 		}
 		if len(tasks) > 0 {
@@ -157,6 +162,7 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 	}
 }
 
+//StatusUpdate is called to get the latest status of the task
 func (sched *ExampleScheduler) StatusUpdate(driver sched.SchedulerDriver, status *mesos.TaskStatus) {
 	log.Infoln("Status update: task", status.TaskId.GetValue(), " is in state ", status.State.Enum().String())
 	if status.GetState() == mesos.TaskState_TASK_FINISHED {
@@ -175,14 +181,32 @@ func (sched *ExampleScheduler) StatusUpdate(driver sched.SchedulerDriver, status
 	}
 }
 
+// OfferRescinded is invoked when an offer is no longer valid (e.g., the slave was
+// lost or another framework used resources in the offer). If for
+// whatever reason an offer is never rescinded (e.g., dropped
+// message, failing over framework, etc.), a framwork that attempts
+// to launch tasks using an invalid offer will receive TASK_LOST
+// status updates for those tasks (see Scheduler::resourceOffers).
 func (sched *ExampleScheduler) OfferRescinded(sched.SchedulerDriver, *mesos.OfferID) {}
 
-func (sched *ExampleScheduler) FrameworkMessage(sched.SchedulerDriver, *mesos.ExecutorID, *mesos.SlaveID, string) {
-}
-func (sched *ExampleScheduler) SlaveLost(sched.SchedulerDriver, *mesos.SlaveID) {}
-func (sched *ExampleScheduler) ExecutorLost(sched.SchedulerDriver, *mesos.ExecutorID, *mesos.SlaveID, int) {
-}
+// FrameworkMessage is invoked when an executor sends a message. These messages are best
+// effort; do not expect a framework message to be retransmitted in
+// any reliable fashion.
+func (sched *ExampleScheduler) FrameworkMessage(sched.SchedulerDriver, *mesos.ExecutorID, *mesos.SlaveID, string) {}
 
+//SlaveLost is invoked when a slave has been determined unreachable (e.g.,
+// machine failure, network partition). Most frameworks will need to
+// reschedule any tasks launched on this slave on a new slave.
+func (sched *ExampleScheduler) SlaveLost(sched.SchedulerDriver, *mesos.SlaveID) {}
+
+//ExecutorLost is invoked when an executor has exited/terminated. Note that any
+// tasks running will have TASK_LOST status updates automagically
+// generated.
+func (sched *ExampleScheduler) ExecutorLost(sched.SchedulerDriver, *mesos.ExecutorID, *mesos.SlaveID, int) {}
+
+//Error is invoked when there is an unrecoverable error in the scheduler or
+// scheduler driver. The driver will be aborted BEFORE invoking this
+// callback.
 func (sched *ExampleScheduler) Error(driver sched.SchedulerDriver, err string) {
 	log.Infoln("Scheduler received error:", err)
 }
@@ -283,6 +307,7 @@ func main() {
 
 }
 
+//QueueMsg is used to pass info to the executor
 type QueueMsg struct {
 	URL       string
 	ID        string
