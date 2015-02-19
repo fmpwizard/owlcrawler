@@ -98,8 +98,8 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 		return
 	}
 	defer resp.Body.Close()
-	parseHtml(resp.Body, msgAndID.URL, queue)
-	html, err := ioutil.ReadAll(resp.Body)
+
+	htmlData, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Printf("\n\n\n\nError while reading html for url: %s, got error: %v\n", msgAndID.URL, err)
 		err = queue.ReleaseMessage(msgAndID.ID, 0)
@@ -116,7 +116,7 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	encodedURL := base64.StdEncoding.EncodeToString([]byte(msgAndID.URL))
 	data := dataStore{
 		URL:  msgAndID.URL,
-		HTML: string(html[:]),
+		HTML: string(htmlData[:]),
 		Date: time.Now().UTC(),
 	}
 	_, err = etcdClient.Set(encodedURL, data.String(), 0)
@@ -125,6 +125,7 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	}
 	fmt.Printf("\n\n\nhtml url is %s\n\n\n", msgAndID.URL)
 	fmt.Printf("\n\n\nhtml encodedURL is %s\n\n\n", encodedURL)
+	parseHtml(resp.Body, msgAndID.URL, queue)
 	// finish task
 	fmt.Println("Finishing task", taskInfo.GetName())
 	finStatus := &mesos.TaskStatus{
