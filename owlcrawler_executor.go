@@ -95,7 +95,12 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	}
 	defer resp.Body.Close()
 	htmlData, err := ioutil.ReadAll(resp.Body)
-	parseHTML(htmlData, msgAndID.URL, queue)
+	etcdClient := etcd.NewClient([]string{msgAndID.EtcdHost})
+	ret := etcdClient.SyncCluster()
+	if !ret {
+		fmt.Println("Error: problem sync'ing with etcd server")
+	}
+	parseHTML(htmlData, msgAndID.URL, queue, etcdClient)
 
 	if err != nil {
 		fmt.Printf("\n\n\n\nError while reading html for url: %s, got error: %v\n", msgAndID.URL, err)
@@ -115,11 +120,6 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 		URL:  msgAndID.URL,
 		HTML: string(htmlData[:]),
 		Date: time.Now().UTC(),
-	}
-	etcdClient := etcd.NewClient([]string{msgAndID.EtcdHost})
-	ret := etcdClient.SyncCluster()
-	if !ret {
-		fmt.Println("Error: problem sync'ing with etcd server")
 	}
 	_, err = etcdClient.Set(encodedURL, data.String(), 0)
 	if err != nil {
@@ -192,7 +192,7 @@ func updateStatusDied(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
 
 }
 
-func parseHTML(data []byte, originalURL string, q *mq.Queue) {
+func parseHTML(data []byte, originalURL string, q *mq.Queue, etcd *etcd.Client) {
 	link, err := url.Parse(originalURL)
 	if err != nil {
 		fmt.Printf("Error parsing url %s, got: %v\n", originalURL, err)
@@ -203,7 +203,6 @@ func parseHTML(data []byte, originalURL string, q *mq.Queue) {
 	for {
 		tokenType := d.Next()
 		if tokenType == html.ErrorToken {
-			fmt.Printf("ERROR: error reading token %v\n", tokenType)
 			return
 		}
 		token := d.Token()
@@ -212,16 +211,32 @@ func parseHTML(data []byte, originalURL string, q *mq.Queue) {
 			for _, attribute := range token.Attr {
 				if attribute.Key == "href" {
 					if strings.HasPrefix(attribute.Val, "//") {
-						fmt.Printf("Found url: %s:%s\n", link.Scheme, attribute.Val)
-						q.PushString(fmt.Sprintf("%s:%s", link.Scheme, attribute.Val))
+						url := fmt.Sprintf("%s:%s", link.Scheme, attribute.Val)
+						fmt.Printf("Found url: %s:%s\n", url)
+						if filterOutURLs(url, etcd) {
+							q.PushString(url)
+						}
 					} else if strings.HasPrefix(attribute.Val, "/") {
-						fmt.Printf("Found url: %s://%s%s\n", link.Scheme, link.Host, attribute.Val)
-						q.PushString(fmt.Sprintf("%s://%s%s", link.Scheme, link.Host, attribute.Val))
+						url := fmt.Sprintf("%s://%s%s", link.Scheme, link.Host, attribute.Val)
+						fmt.Printf("Found url: %s\n", url)
+						if filterOutURLs(url, etcd) {
+							q.PushString(url)
+						}
 					} else {
 						fmt.Printf("Not sure what to do with this url: %s\n", attribute.Val)
 					}
 				}
 			}
 		}
+	}
+}
+
+func filterOutURLs(url string, etcd *etcd.Client) bool {
+	encodedURL := base64.StdEncoding.EncodeToString([]byte(url))
+	_, err := etcd.Get(encodedURL, false, false)
+	if err == nil { //found an entry, no need to fetch it again
+		return false
+	} else {
+		return true
 	}
 }
