@@ -213,13 +213,13 @@ func parseHTML(data []byte, originalURL string, q *mq.Queue, etcd *etcd.Client) 
 					if strings.HasPrefix(attribute.Val, "//") {
 						url := fmt.Sprintf("%s:%s", link.Scheme, attribute.Val)
 						fmt.Printf("Found url: %s:%s\n", url)
-						if filterOutURLs(url, etcd) {
+						if sendURLToMQ(url, etcd) {
 							q.PushString(url)
 						}
 					} else if strings.HasPrefix(attribute.Val, "/") {
 						url := fmt.Sprintf("%s://%s%s", link.Scheme, link.Host, attribute.Val)
 						fmt.Printf("Found url: %s\n", url)
-						if filterOutURLs(url, etcd) {
+						if sendURLToMQ(url, etcd) {
 							q.PushString(url)
 						}
 					} else {
@@ -231,7 +231,7 @@ func parseHTML(data []byte, originalURL string, q *mq.Queue, etcd *etcd.Client) 
 	}
 }
 
-func filterOutURLs(url string, etcd *etcd.Client) bool {
+func sendURLToMQ(url string, etcd *etcd.Client) bool {
 	encodedURL := base64.StdEncoding.EncodeToString([]byte(url))
 	_, err := etcd.Get(encodedURL, false, false)
 	if err == nil { //found an entry, no need to fetch it again
