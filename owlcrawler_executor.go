@@ -24,8 +24,8 @@ type exampleExecutor struct {
 	tasksLaunched int
 }
 
-//QueueMsg is used to decode the Data payload from the framework
-type QueueMsg struct {
+//OwlCrawlMsg is used to decode the Data payload from the framework
+type OwlCrawlMsg struct {
 	URL       string
 	ID        string
 	QueueName string
@@ -76,48 +76,48 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	// this is where one would perform the requested task
 	//
 	payload := bytes.NewReader(taskInfo.GetData())
-	var msgAndID QueueMsg
+	var queueMessage OwlCrawlMsg
 	dec := gob.NewDecoder(payload)
-	err = dec.Decode(&msgAndID)
+	err = dec.Decode(&queueMessage)
 	if err != nil {
 		fmt.Println("decode error:", err)
 	}
-	queue := mq.New(msgAndID.QueueName)
-	resp, err := http.Get(msgAndID.URL)
+	queue := mq.New(queueMessage.QueueName)
+	resp, err := http.Get(queueMessage.URL)
 	if err != nil {
-		fmt.Printf("\n\n\n\nError while fetching url: %s, got error: %v\n", msgAndID.URL, err)
-		err = queue.ReleaseMessage(msgAndID.ID, 0)
+		fmt.Printf("Error while fetching url: %s, got error: %v\n", queueMessage.URL, err)
+		err = queue.ReleaseMessage(queueMessage.ID, 0)
 		if err != nil {
-			fmt.Printf("Error releasing message id: %s from queue, got: %v\n", msgAndID.ID, err)
+			fmt.Printf("Error releasing message id: %s from queue, got: %v\n", queueMessage.ID, err)
 		}
 		updateStatusDied(driver, taskInfo)
 		return
 	}
 	defer resp.Body.Close()
 	htmlData, err := ioutil.ReadAll(resp.Body)
-	etcdClient := etcd.NewClient([]string{msgAndID.EtcdHost})
+	etcdClient := etcd.NewClient([]string{queueMessage.EtcdHost})
 	ret := etcdClient.SyncCluster()
 	if !ret {
 		fmt.Println("Error: problem sync'ing with etcd server")
 	}
-	parseHTML(htmlData, msgAndID.URL, queue, etcdClient)
+	extractLinks(htmlData, queueMessage.URL, queue, etcdClient)
 
 	if err != nil {
-		fmt.Printf("\n\n\n\nError while reading html for url: %s, got error: %v\n", msgAndID.URL, err)
-		err = queue.ReleaseMessage(msgAndID.ID, 0)
+		fmt.Printf("\n\n\n\nError while reading html for url: %s, got error: %v\n", queueMessage.URL, err)
+		err = queue.ReleaseMessage(queueMessage.ID, 0)
 		if err != nil {
-			fmt.Printf("Error releasing message id: %s from queue, got: %v\n", msgAndID.ID, err)
+			fmt.Printf("Error releasing message id: %s from queue, got: %v\n", queueMessage.ID, err)
 		}
 		updateStatusDied(driver, taskInfo)
 		return
 	}
-	err = queue.DeleteMessage(msgAndID.ID)
+	err = queue.DeleteMessage(queueMessage.ID)
 	if err != nil {
-		fmt.Printf("Error deleting message id: %s from queue, got: %v\n", msgAndID.ID, err)
+		fmt.Printf("Error deleting message id: %s from queue, got: %v\n", queueMessage.ID, err)
 	}
-	encodedURL := base64.StdEncoding.EncodeToString([]byte(msgAndID.URL))
+	encodedURL := base64.StdEncoding.EncodeToString([]byte(queueMessage.URL))
 	data := dataStore{
-		URL:  msgAndID.URL,
+		URL:  queueMessage.URL,
 		HTML: string(htmlData[:]),
 		Date: time.Now().UTC(),
 	}
@@ -125,7 +125,7 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	if err != nil {
 		fmt.Printf("Got error adding html to etcd, got: %v\n", err)
 	}
-	fmt.Printf("\n\n\nhtml url is %s\n\n\n", msgAndID.URL)
+	fmt.Printf("\n\n\nhtml url is %s\n\n\n", queueMessage.URL)
 	fmt.Printf("\n\n\nhtml encodedURL is %s\n\n\n", encodedURL)
 
 	// finish task
@@ -192,7 +192,7 @@ func updateStatusDied(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
 
 }
 
-func parseHTML(data []byte, originalURL string, q *mq.Queue, etcd *etcd.Client) {
+func extractLinks(data []byte, originalURL string, q *mq.Queue, etcd *etcd.Client) {
 	link, err := url.Parse(originalURL)
 	if err != nil {
 		fmt.Printf("Error parsing url %s, got: %v\n", originalURL, err)

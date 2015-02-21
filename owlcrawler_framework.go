@@ -127,7 +127,7 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 			}
 			var msgAndID bytes.Buffer
 			enc := gob.NewEncoder(&msgAndID)
-			err = enc.Encode(QueueMsg{
+			err = enc.Encode(OwlCrawlMsg{
 				URL:       msg.Body,
 				ID:        msg.Id,
 				QueueName: queueName,
@@ -310,8 +310,8 @@ func main() {
 
 }
 
-//QueueMsg is used to pass info to the executor
-type QueueMsg struct {
+//OwlCrawlMsg is used to pass info to the executor
+type OwlCrawlMsg struct {
 	URL       string
 	ID        string
 	QueueName string
