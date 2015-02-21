@@ -125,8 +125,7 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	if err != nil {
 		fmt.Printf("Got error adding html to etcd, got: %v\n", err)
 	}
-	fmt.Printf("\n\n\nhtml url is %s\n\n\n", queueMessage.URL)
-	fmt.Printf("\n\n\nhtml encodedURL is %s\n\n\n", encodedURL)
+	fmt.Printf("==> html encodedURL is %s\n", encodedURL)
 
 	// finish task
 	fmt.Println("Finishing task", taskInfo.GetName())
@@ -208,22 +207,24 @@ func extractLinks(data []byte, originalURL string, q *mq.Queue, etcd *etcd.Clien
 		token := d.Token()
 		switch tokenType {
 		case html.StartTagToken:
-			for _, attribute := range token.Attr {
-				if attribute.Key == "href" {
-					if strings.HasPrefix(attribute.Val, "//") {
-						url := fmt.Sprintf("%s:%s", link.Scheme, attribute.Val)
-						fmt.Printf("Found url: %s:%s\n", url)
-						if sendURLToMQ(url, etcd) {
-							q.PushString(url)
+			if token.DataAtom.String() == "a" {
+				for _, attribute := range token.Attr {
+					if attribute.Key == "href" {
+						if strings.HasPrefix(attribute.Val, "//") {
+							url := fmt.Sprintf("%s:%s", link.Scheme, attribute.Val)
+							if sendURLToMQ(url, etcd) {
+								fmt.Printf("Sending url: %s:%s\n", url)
+								q.PushString(url)
+							}
+						} else if strings.HasPrefix(attribute.Val, "/") {
+							url := fmt.Sprintf("%s://%s%s", link.Scheme, link.Host, attribute.Val)
+							if sendURLToMQ(url, etcd) {
+								fmt.Printf("Sending url: %s\n", url)
+								q.PushString(url)
+							}
+						} else {
+							fmt.Printf("Not sure what to do with this url: %s\n", attribute.Val)
 						}
-					} else if strings.HasPrefix(attribute.Val, "/") {
-						url := fmt.Sprintf("%s://%s%s", link.Scheme, link.Host, attribute.Val)
-						fmt.Printf("Found url: %s\n", url)
-						if sendURLToMQ(url, etcd) {
-							q.PushString(url)
-						}
-					} else {
-						fmt.Printf("Not sure what to do with this url: %s\n", attribute.Val)
 					}
 				}
 			}
