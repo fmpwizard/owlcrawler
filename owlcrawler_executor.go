@@ -71,7 +71,7 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	}
 
 	exec.tasksLaunched++
-	fmt.Println("\n\n\n\nTotal tasks launched ", exec.tasksLaunched)
+	fmt.Println("Total tasks launched ", exec.tasksLaunched)
 	//
 	// this is where one would perform the requested task
 	//
