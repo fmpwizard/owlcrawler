@@ -233,7 +233,7 @@ func extractLinks(data []byte, originalURL string, q *mq.Queue, etcd *etcd.Clien
 }
 
 func sendURLToMQ(url string, etcd *etcd.Client) bool {
-	encodedURL := base64.StdEncoding.EncodeToString([]byte(url))
+	encodedURL := base64.URLEncoding.EncodeToString([]byte(url))
 	_, err := etcd.Get(encodedURL, false, false)
 	if err == nil { //found an entry, no need to fetch it again
 		return false

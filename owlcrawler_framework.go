@@ -98,26 +98,21 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 		for cpuPerTask <= remainingCpus &&
 			memPerTask <= remainingMems {
 
-			//var resp *etcd.Response
-
 			msg, err := queue.Get()
 			if err != nil {
-				//log.Errorf("\n\n\n\n=====> Error while getting a msg from the queue, got: %v\n\n\n", err)
+				log.Errorf("Error while getting a msg from the queue, got: %v\n", err)
 				break
 			} else {
 				ret := etcdClient.SyncCluster()
 				if !ret {
-					//log.Infoln("\n\n\n\n Got problemSSS \n\n\n\n")
+					log.Infoln("Problem sync'ing etcd cluster")
 				}
-				encodedURL := base64.StdEncoding.EncodeToString([]byte(msg.Body))
+				encodedURL := base64.URLEncoding.EncodeToString([]byte(msg.Body))
 				_, err := etcdClient.Get(encodedURL, false, false)
 				if err == nil { //found an entry, no need to fetch it again
-					//log.Infof("\n\n\n\n Already fetched this url, remove from queue ============> %+v \n\n\n\n", encodedURL)
 					msg.Delete()
 					break
 				}
-				//log.Infof("\n\n\n\n Got result.Node.Key ============>%+v \n\n\n\n", result.Node.Key)
-
 			}
 
 			sched.tasksLaunched++
@@ -148,7 +143,6 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 				},
 				Data: msgAndID.Bytes(),
 			}
-			//log.Infof("Prepared task: %s with offer %s for launch\n", task.GetName(), offer.Id.GetValue())
 
 			tasks = append(tasks, task)
 			remainingCpus -= cpuPerTask
