@@ -100,7 +100,6 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 
 			msg, err := queue.Get()
 			if err != nil {
-				log.Errorf("Error while getting a msg from the queue, got: %v\n", err)
 				break
 			} else {
 				ret := etcdClient.SyncCluster()

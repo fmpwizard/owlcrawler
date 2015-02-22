@@ -75,6 +75,8 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	//
 	// this is where one would perform the requested task
 	//
+
+	//Read information about this URL we are about to process
 	payload := bytes.NewReader(taskInfo.GetData())
 	var queueMessage OwlCrawlMsg
 	dec := gob.NewDecoder(payload)
@@ -83,6 +85,8 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 		fmt.Println("decode error:", err)
 	}
 	queue := mq.New(queueMessage.QueueName)
+
+	//Fetch url
 	resp, err := http.Get(queueMessage.URL)
 	if err != nil {
 		fmt.Printf("Error while fetching url: %s, got error: %v\n", queueMessage.URL, err)
@@ -93,17 +97,11 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 		updateStatusDied(driver, taskInfo)
 		return
 	}
+
 	defer resp.Body.Close()
 	htmlData, err := ioutil.ReadAll(resp.Body)
-	etcdClient := etcd.NewClient([]string{queueMessage.EtcdHost})
-	ret := etcdClient.SyncCluster()
-	if !ret {
-		fmt.Println("Error: problem sync'ing with etcd server")
-	}
-	extractLinks(htmlData, queueMessage.URL, queue, etcdClient)
-
 	if err != nil {
-		fmt.Printf("\n\n\n\nError while reading html for url: %s, got error: %v\n", queueMessage.URL, err)
+		fmt.Printf("Error while reading html for url: %s, got error: %v\n", queueMessage.URL, err)
 		err = queue.ReleaseMessage(queueMessage.ID, 0)
 		if err != nil {
 			fmt.Printf("Error releasing message id: %s from queue, got: %v\n", queueMessage.ID, err)
@@ -111,6 +109,16 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 		updateStatusDied(driver, taskInfo)
 		return
 	}
+
+	etcdClient := etcd.NewClient([]string{queueMessage.EtcdHost})
+
+	ret := etcdClient.SyncCluster()
+	if !ret {
+		fmt.Println("Error: problem sync'ing with etcd server")
+	}
+
+	extractLinks(htmlData, queueMessage.URL, queue, etcdClient)
+
 	err = queue.DeleteMessage(queueMessage.ID)
 	if err != nil {
 		fmt.Printf("Error deleting message id: %s from queue, got: %v\n", queueMessage.ID, err)
