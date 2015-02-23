@@ -4,11 +4,10 @@ package main
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/gob"
 	"flag"
 	"fmt"
-	"github.com/coreos/go-etcd/etcd"
+	"github.com/fmpwizard/owlcrawler/cloudant"
 	"github.com/iron-io/iron_go/mq"
 	"io/ioutil"
 	"net/http"
@@ -29,15 +28,12 @@ const (
 
 var (
 	address             = flag.String("address", "127.0.0.1", "Binding address for artifact server")
-	etcHostAndport      = flag.String("etcdAddress", "127.0.0.1:2379", "Binding address for artifact server")
 	artifactPort        = flag.Int("artifactPort", 12345, "Binding port for artifact server")
 	master              = flag.String("master", "127.0.0.1:5050", "Master address <ip:port>")
 	executorPath        = flag.String("executor", "./test_executor", "Path to test executor")
 	mesosAuthPrincipal  = flag.String("mesos_authentication_principal", "", "Mesos authentication principal.")
 	mesosAuthSecretFile = flag.String("mesos_authentication_secret_file", "", "Mesos authentication secret file.")
 )
-
-var etcdClient = etcd.NewClient([]string{*etcHostAndport})
 
 //ExampleScheduler Basic scheduler
 type ExampleScheduler struct {
@@ -102,13 +98,8 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 			if err != nil {
 				break
 			} else {
-				ret := etcdClient.SyncCluster()
-				if !ret {
-					log.Infoln("Problem sync'ing etcd cluster")
-				}
-				encodedURL := base64.URLEncoding.EncodeToString([]byte(msg.Body))
-				_, err := etcdClient.Get(encodedURL, false, false)
-				if err == nil { //found an entry, no need to fetch it again
+
+				if cloudant.IsURLThere(msg.Body) { //found an entry, no need to fetch it again
 					msg.Delete()
 					break
 				}
@@ -125,7 +116,6 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 				URL:       msg.Body,
 				ID:        msg.Id,
 				QueueName: queueName,
-				EtcdHost:  *etcHostAndport,
 			})
 			if err != nil {
 				log.Fatal("encode error:", err)
@@ -308,5 +298,4 @@ type OwlCrawlMsg struct {
 	URL       string
 	ID        string
 	QueueName string
-	EtcdHost  string
 }

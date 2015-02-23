@@ -3,13 +3,14 @@
 package main
 
 import (
+	"encoding/json"
+	"github.com/fmpwizard/owlcrawler/cloudant"
+
 	"bytes"
 	"code.google.com/p/go.net/html"
-	"encoding/base64"
 	"encoding/gob"
 	"flag"
 	"fmt"
-	"github.com/coreos/go-etcd/etcd"
 	"github.com/iron-io/iron_go/mq"
 	exec "github.com/mesos/mesos-go/executor"
 	mesos "github.com/mesos/mesos-go/mesosproto"
@@ -29,17 +30,12 @@ type OwlCrawlMsg struct {
 	URL       string
 	ID        string
 	QueueName string
-	EtcdHost  string
 }
 
 type dataStore struct {
-	URL  string
-	HTML string
-	Date time.Time
-}
-
-func (data *dataStore) String() string {
-	return "'url': '" + data.URL + "', 'html': '" + data.HTML + "' , 'date' : '" + data.Date.String() + "'"
+	URL  string    `json:"url"`
+	HTML string    `json:"html"`
+	Date time.Time `json:"date"`
 }
 
 func newExampleExecutor() *exampleExecutor {
@@ -87,7 +83,13 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	queue := mq.New(queueMessage.QueueName)
 
 	//Fetch url
-	resp, err := http.Get(queueMessage.URL)
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", queueMessage.URL, nil)
+	if err != nil {
+		fmt.Printf("Error parsing url: %s, got: %v\n", queueMessage.URL, err)
+	}
+	req.Header.Set("User-Agent", "OwlCrawler - https://github.com/fmpwizard/owlcrawler")
+	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Printf("Error while fetching url: %s, got error: %v\n", queueMessage.URL, err)
 		err = queue.ReleaseMessage(queueMessage.ID, 0)
@@ -110,30 +112,24 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 		return
 	}
 
-	etcdClient := etcd.NewClient([]string{queueMessage.EtcdHost})
-
-	ret := etcdClient.SyncCluster()
-	if !ret {
-		fmt.Println("Error: problem sync'ing with etcd server")
-	}
-
-	extractLinks(htmlData, queueMessage.URL, queue, etcdClient)
+	extractLinks(htmlData, queueMessage.URL, queue)
 
 	err = queue.DeleteMessage(queueMessage.ID)
 	if err != nil {
 		fmt.Printf("Error deleting message id: %s from queue, got: %v\n", queueMessage.ID, err)
 	}
-	encodedURL := base64.StdEncoding.EncodeToString([]byte(queueMessage.URL))
-	data := dataStore{
+	data := &dataStore{
 		URL:  queueMessage.URL,
 		HTML: string(htmlData[:]),
 		Date: time.Now().UTC(),
 	}
-	_, err = etcdClient.Set(encodedURL, data.String(), 0)
+
+	pageData, err := json.Marshal(data)
 	if err != nil {
-		fmt.Printf("Got error adding html to etcd, got: %v\n", err)
+		fmt.Printf("Error generating json to save in database, got: %v\n", err)
 	}
-	fmt.Printf("==> html encodedURL is %s\n", encodedURL)
+
+	cloudant.AddURLData(queueMessage.URL, pageData)
 
 	// finish task
 	fmt.Println("Finishing task", taskInfo.GetName())
@@ -199,7 +195,7 @@ func updateStatusDied(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
 
 }
 
-func extractLinks(data []byte, originalURL string, q *mq.Queue, etcd *etcd.Client) {
+func extractLinks(data []byte, originalURL string, q *mq.Queue) {
 	link, err := url.Parse(originalURL)
 	if err != nil {
 		fmt.Printf("Error parsing url %s, got: %v\n", originalURL, err)
@@ -220,13 +216,13 @@ func extractLinks(data []byte, originalURL string, q *mq.Queue, etcd *etcd.Clien
 					if attribute.Key == "href" {
 						if strings.HasPrefix(attribute.Val, "//") {
 							url := fmt.Sprintf("%s:%s", link.Scheme, attribute.Val)
-							if sendURLToMQ(url, etcd) {
+							if sendURLToMQ(url) {
 								fmt.Printf("Sending url: %s:%s\n", url)
 								q.PushString(url)
 							}
 						} else if strings.HasPrefix(attribute.Val, "/") {
 							url := fmt.Sprintf("%s://%s%s", link.Scheme, link.Host, attribute.Val)
-							if sendURLToMQ(url, etcd) {
+							if sendURLToMQ(url) {
 								fmt.Printf("Sending url: %s\n", url)
 								q.PushString(url)
 							}
@@ -240,12 +236,6 @@ func extractLinks(data []byte, originalURL string, q *mq.Queue, etcd *etcd.Clien
 	}
 }
 
-func sendURLToMQ(url string, etcd *etcd.Client) bool {
-	encodedURL := base64.URLEncoding.EncodeToString([]byte(url))
-	_, err := etcd.Get(encodedURL, false, false)
-	if err == nil { //found an entry, no need to fetch it again
-		return false
-	} else {
-		return true
-	}
+func sendURLToMQ(url string) bool {
+	return !cloudant.IsURLThere(url)
 }
