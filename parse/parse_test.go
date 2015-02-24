@@ -14,8 +14,8 @@ var doc1 = `{
 
 func TestExtractText(t *testing.T) {
 	extracted := ExtractText([]byte(doc1))
-	if extracted.Title == "2sss" {
-		t.Errorf("ExtractText didn't give us expected result: \n%+v\n\nIt gave: no Title element\n", extracted)
+	if extracted.Title != "Dynamically adding fields to a Lift application" {
+		t.Errorf("ExtractText didn't give us expected result. It gave: %s\n", extracted.Title)
 	}
 	if len(extracted.H1) != 1 {
 		t.Errorf("ExtractText didn't give us expected result: \n%+v\n\nIt gave: %d H1 elements\n", extracted, len(extracted.H1))
