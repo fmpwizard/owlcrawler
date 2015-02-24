@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os/user"
 	"path/filepath"
+	"time"
 )
 
 var cloudantCredentials cloudantCred
@@ -24,6 +25,15 @@ type couchDBFound struct {
 		Key   string
 		Value int
 	}
+}
+
+//CouchDoc represents a response fron CouchDB
+type CouchDoc struct {
+	ID   string    `json:"_id"`
+	Rev  string    `json:"_rev"`
+	URL  string    `json:"url"`
+	HTML string    `json:"html"`
+	Date time.Time `json:"date"`
 }
 
 func init() {
