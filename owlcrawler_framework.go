@@ -9,7 +9,12 @@ import (
 	"fmt"
 	"github.com/fmpwizard/owlcrawler/cloudant"
 	"github.com/iron-io/iron_go/mq"
+	"github.com/mesos/mesos-go/auth"
+	"github.com/mesos/mesos-go/auth/sasl"
+	"github.com/mesos/mesos-go/auth/sasl/mech"
+	"golang.org/x/net/context"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -27,8 +32,10 @@ const (
 )
 
 var (
-	address             = flag.String("address", "127.0.0.1", "Binding address for artifact server")
-	artifactPort        = flag.Int("artifactPort", 12345, "Binding port for artifact server")
+	address      = flag.String("address", "127.0.0.1", "Binding address for artifact server")
+	artifactPort = flag.Int("artifactPort", 12345, "Binding port for artifact server")
+	authProvider = flag.String("mesos_authentication_provider", sasl.ProviderName,
+		fmt.Sprintf("Authentication provider to use, default is SASL that supports mechanisms: %+v", mech.ListSupported()))
 	master              = flag.String("master", "127.0.0.1:5050", "Master address <ip:port>")
 	executorPath        = flag.String("executor", "./test_executor", "Path to test executor")
 	mesosAuthPrincipal  = flag.String("mesos_authentication_principal", "", "Mesos authentication principal.")
@@ -98,7 +105,6 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 			if err != nil {
 				break
 			} else {
-
 				if cloudant.IsURLThere(msg.Body) { //found an entry, no need to fetch it again
 					msg.Delete()
 					break
@@ -250,6 +256,17 @@ func prepareExecutorInfo() *mesos.ExecutorInfo {
 	}
 }
 
+func parseIP(address string) net.IP {
+	addr, err := net.LookupIP(address)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if len(addr) < 1 {
+		log.Fatalf("failed to parse IP from address '%v'", address)
+	}
+	return addr[0]
+}
+
 // ----------------------- func main() ------------------------- //
 
 func main() {
@@ -276,13 +293,20 @@ func main() {
 		}
 	}
 
-	driver, err := sched.NewMesosSchedulerDriver(
-		newExampleScheduler(exec),
-		fwinfo,
-		*master,
-		cred,
-	)
-
+	bindingAddress := parseIP(*address)
+	config := sched.DriverConfig{
+		Scheduler:      newExampleScheduler(exec),
+		Framework:      fwinfo,
+		Master:         *master,
+		Credential:     cred,
+		BindingAddress: bindingAddress,
+		WithAuthContext: func(ctx context.Context) context.Context {
+			ctx = auth.WithLoginProvider(ctx, *authProvider)
+			ctx = sasl.WithBindingAddress(ctx, bindingAddress)
+			return ctx
+		},
+	}
+	driver, err := sched.NewMesosSchedulerDriver(config)
 	if err != nil {
 		log.Errorln("Unable to create a SchedulerDriver ", err.Error())
 	}

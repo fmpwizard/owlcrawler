@@ -13,11 +13,8 @@ import (
 	"github.com/iron-io/iron_go/mq"
 	exec "github.com/mesos/mesos-go/executor"
 	mesos "github.com/mesos/mesos-go/mesosproto"
-	"golang.org/x/net/html"
 	"io/ioutil"
 	"net/http"
-	"net/url"
-	"strings"
 	"time"
 )
 
@@ -112,7 +109,7 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 		return
 	}
 
-	extractLinks(htmlData, queueMessage.URL, queue)
+	//extractLinks(htmlData, queueMessage.URL, queue) //TODO
 
 	err = queue.DeleteMessage(queueMessage.ID)
 	if err != nil {
@@ -168,7 +165,10 @@ func init() {
 func main() {
 	fmt.Println("Starting Example Executor (Go)")
 
-	driver, err := exec.NewMesosExecutorDriver(newExampleExecutor())
+	dconfig := exec.DriverConfig{
+		Executor: newExampleExecutor(),
+	}
+	driver, err := exec.NewMesosExecutorDriver(dconfig)
 
 	if err != nil {
 		fmt.Println("Unable to create a ExecutorDriver ", err.Error())
@@ -193,49 +193,4 @@ func updateStatusDied(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
 		fmt.Printf("Failed to tell mesos that we died, sorry, got: %v", err)
 	}
 
-}
-
-func extractLinks(data []byte, originalURL string, q *mq.Queue) {
-	link, err := url.Parse(originalURL)
-	if err != nil {
-		fmt.Printf("Error parsing url %s, got: %v\n", originalURL, err)
-	}
-
-	d := html.NewTokenizer(bytes.NewReader(data))
-
-	for {
-		tokenType := d.Next()
-		if tokenType == html.ErrorToken {
-			return
-		}
-		token := d.Token()
-		switch tokenType {
-		case html.StartTagToken:
-			if token.DataAtom.String() == "a" {
-				for _, attribute := range token.Attr {
-					if attribute.Key == "href" {
-						if strings.HasPrefix(attribute.Val, "//") {
-							url := fmt.Sprintf("%s:%s", link.Scheme, attribute.Val)
-							if sendURLToMQ(url) {
-								fmt.Printf("Sending url: %s:%s\n", url)
-								q.PushString(url)
-							}
-						} else if strings.HasPrefix(attribute.Val, "/") {
-							url := fmt.Sprintf("%s://%s%s", link.Scheme, link.Host, attribute.Val)
-							if sendURLToMQ(url) {
-								fmt.Printf("Sending url: %s\n", url)
-								q.PushString(url)
-							}
-						} else {
-							fmt.Printf("Not sure what to do with this url: %s\n", attribute.Val)
-						}
-					}
-				}
-			}
-		}
-	}
-}
-
-func sendURLToMQ(url string) bool {
-	return !cloudant.IsURLThere(url)
 }

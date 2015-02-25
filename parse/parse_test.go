@@ -12,6 +12,10 @@ var doc1 = `{
   "date": "2015-02-23T07:59:30.118308477Z"
 }`
 
+func mockedFetchChecker(url string) bool {
+	return true
+}
+
 func TestExtractText(t *testing.T) {
 	extracted := ExtractText([]byte(doc1))
 	if extracted.Title != "Dynamically adding fields to a Lift application" {
@@ -22,5 +26,12 @@ func TestExtractText(t *testing.T) {
 	}
 	if len(extracted.H2) != 4 {
 		t.Errorf("ExtractText didn't give us expected result: \n%+v\n\nIt gave: %d H2 elements\n", extracted, len(extracted.H2))
+	}
+}
+
+func TestExtractLinks(t *testing.T) {
+	extracted := ExtractLinks([]byte(doc1), "http://blog.fmpwizard.com", mockedFetchChecker)
+	if len(extracted.URL) != 4 {
+		t.Errorf("ExtractLinks didn't give us expected result. It gave: %d urls\n", len(extracted.URL))
 	}
 }
