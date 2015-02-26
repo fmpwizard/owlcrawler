@@ -52,7 +52,7 @@ func init() {
 }
 
 //AddURLData adds the url and data to the database. data is json encoded.
-func AddURLData(url string, data []byte) {
+func AddURLData(url string, data []byte) CouchDoc {
 	client := &http.Client{}
 	document := bytes.NewReader(data)
 	req, err := http.NewRequest("POST", cloudantCredentials.URL, document)
@@ -67,9 +67,18 @@ func AddURLData(url string, data []byte) {
 	if err != nil {
 		log.Printf("Error sending request to Cloudant, got: %v\n", err)
 	}
+	var ret CouchDoc
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Error parsing result of saving document, got: %v\n", err)
+	}
+	err = json.Unmarshal(body, &ret)
+	if err != nil {
+		log.Printf("Error serializing from json to a CouchDoc, got: %v\n", err)
+	}
 	defer resp.Body.Close()
 	log.Printf("AddURLData respose was %+v\n", resp)
-	return
+	return ret
 }
 
 //IsURLThere checks if the given url is already stored in the database

@@ -70,10 +70,13 @@ func (sched *ExampleScheduler) Reregistered(driver sched.SchedulerDriver, master
 // Disconnected implements the Disconnected handler.
 func (sched *ExampleScheduler) Disconnected(sched.SchedulerDriver) {}
 
-//ResourceOffers is where yo udecide if you should use resources or not.
+//ResourceOffers is where you decide if you should use resources or not.
 func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offers []*mesos.Offer) {
-	queueName := "urls_to_fetch"
-	queue := mq.New(queueName)
+
+	URLToFetchQueueName := "urls_to_fetch"
+	HTMLToParseQueueName := "html_to_parse"
+	URLToFetchQueue := mq.New(URLToFetchQueueName)
+	HTMLToParseQueue := mq.New(HTMLToParseQueueName)
 
 	for _, offer := range offers {
 		cpuResources := util.FilterResources(offer.Resources, func(res *mesos.Resource) bool {
@@ -101,48 +104,14 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 		for cpuPerTask <= remainingCpus &&
 			memPerTask <= remainingMems {
 
-			msg, err := queue.Get()
-			if err != nil {
-				break
-			} else {
-				if cloudant.IsURLThere(msg.Body) { //found an entry, no need to fetch it again
-					msg.Delete()
-					break
-				}
+			if ok, task := fetchTask(URLToFetchQueue, sched, offer.SlaveId); ok {
+				tasks = append(tasks, task)
 			}
-
-			sched.tasksLaunched++
-
-			taskID := &mesos.TaskID{
-				Value: proto.String(strconv.Itoa(sched.tasksLaunched)),
+			if ok, task := parseTask(HTMLToParseQueue, sched, offer.SlaveId); ok {
+				tasks = append(tasks, task)
 			}
-			var msgAndID bytes.Buffer
-			enc := gob.NewEncoder(&msgAndID)
-			err = enc.Encode(OwlCrawlMsg{
-				URL:       msg.Body,
-				ID:        msg.Id,
-				QueueName: queueName,
-			})
-			if err != nil {
-				log.Fatal("encode error:", err)
-			}
-
-			task := &mesos.TaskInfo{
-				Name:     proto.String("go-task-" + taskID.GetValue()),
-				TaskId:   taskID,
-				SlaveId:  offer.SlaveId,
-				Executor: sched.executor,
-				Resources: []*mesos.Resource{
-					util.NewScalarResource("cpus", cpuPerTask),
-					util.NewScalarResource("mem", memPerTask),
-				},
-				Data: msgAndID.Bytes(),
-			}
-
-			tasks = append(tasks, task)
 			remainingCpus -= cpuPerTask
 			remainingMems -= memPerTask
-
 		}
 		if len(tasks) > 0 {
 			log.Infoln("Launching ", len(tasks), "tasks for offer", offer.Id.GetValue())
@@ -150,6 +119,88 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 
 		driver.LaunchTasks([]*mesos.OfferID{offer.Id}, tasks, &mesos.Filters{RefuseSeconds: proto.Float64(1)})
 	}
+}
+
+func fetchTask(queue *mq.Queue, sched *ExampleScheduler, workerID *mesos.SlaveID) (bool, *mesos.TaskInfo) {
+	msg, err := queue.Get()
+	if err != nil {
+		return false, &mesos.TaskInfo{}
+	} else {
+		if cloudant.IsURLThere(msg.Body) { //found an entry, no need to fetch it again
+			msg.Delete()
+			return false, &mesos.TaskInfo{}
+		}
+	}
+
+	sched.tasksLaunched++
+
+	taskID := &mesos.TaskID{
+		Value: proto.String(strconv.Itoa(sched.tasksLaunched)),
+	}
+	var msgAndID bytes.Buffer
+	enc := gob.NewEncoder(&msgAndID)
+	err = enc.Encode(OwlCrawlMsg{
+		URL:       msg.Body,
+		ID:        msg.Id,
+		QueueName: queue.Name,
+	})
+	if err != nil {
+		log.Fatal("encode error:", err)
+	}
+
+	task := &mesos.TaskInfo{
+		Name:     proto.String("own-crawler-fetch-" + taskID.GetValue()),
+		TaskId:   taskID,
+		SlaveId:  workerID,
+		Executor: sched.executor,
+		Resources: []*mesos.Resource{
+			util.NewScalarResource("cpus", cpuPerTask),
+			util.NewScalarResource("mem", memPerTask),
+		},
+		Data: msgAndID.Bytes(),
+	}
+	return true, task
+}
+
+func parseTask(queue *mq.Queue, sched *ExampleScheduler, workerID *mesos.SlaveID) (bool, *mesos.TaskInfo) {
+	msg, err := queue.Get()
+	if err != nil {
+		return false, &mesos.TaskInfo{}
+	} else {
+		if cloudant.IsURLThere(msg.Body) { //found an entry, no need to fetch it again
+			msg.Delete()
+			return false, &mesos.TaskInfo{}
+		}
+	}
+
+	sched.tasksLaunched++
+
+	taskID := &mesos.TaskID{
+		Value: proto.String(strconv.Itoa(sched.tasksLaunched)),
+	}
+	var msgAndID bytes.Buffer
+	enc := gob.NewEncoder(&msgAndID)
+	err = enc.Encode(OwlCrawlMsg{
+		URL:       msg.Body,
+		ID:        msg.Id,
+		QueueName: queue.Name,
+	})
+	if err != nil {
+		log.Fatal("encode error:", err)
+	}
+
+	task := &mesos.TaskInfo{
+		Name:     proto.String("own-crawler-parse-" + taskID.GetValue()),
+		TaskId:   taskID,
+		SlaveId:  workerID,
+		Executor: sched.executor,
+		Resources: []*mesos.Resource{
+			util.NewScalarResource("cpus", cpuPerTask),
+			util.NewScalarResource("mem", memPerTask),
+		},
+		Data: msgAndID.Bytes(),
+	}
+	return true, task
 }
 
 //StatusUpdate is called to get the latest status of the task
@@ -247,7 +298,7 @@ func prepareExecutorInfo() *mesos.ExecutorInfo {
 	// Create mesos scheduler driver.
 	return &mesos.ExecutorInfo{
 		ExecutorId: util.NewExecutorID("default"),
-		Name:       proto.String("Test Executor (Go)"),
+		Name:       proto.String("OwnCralwer"),
 		Source:     proto.String("go_test"),
 		Command: &mesos.CommandInfo{
 			Value: proto.String(executorCommand),

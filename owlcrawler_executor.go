@@ -109,8 +109,6 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 		return
 	}
 
-	//extractLinks(htmlData, queueMessage.URL, queue) //TODO
-
 	err = queue.DeleteMessage(queueMessage.ID)
 	if err != nil {
 		fmt.Printf("Error deleting message id: %s from queue, got: %v\n", queueMessage.ID, err)
@@ -126,7 +124,9 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 		fmt.Printf("Error generating json to save in database, got: %v\n", err)
 	}
 
-	cloudant.AddURLData(queueMessage.URL, pageData)
+	ret := cloudant.AddURLData(queueMessage.URL, pageData)
+	parseHTMLQueue := mq.New("html_to_parse")
+	parseHTMLQueue.PushString(ret.ID)
 
 	// finish task
 	fmt.Println("Finishing task", taskInfo.GetName())
