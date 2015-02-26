@@ -297,9 +297,9 @@ func prepareExecutorInfo() *mesos.ExecutorInfo {
 
 	// Create mesos scheduler driver.
 	return &mesos.ExecutorInfo{
-		ExecutorId: util.NewExecutorID("default"),
-		Name:       proto.String("OwnCralwer"),
-		Source:     proto.String("go_test"),
+		ExecutorId: util.NewExecutorID("owl-cralwer"),
+		Name:       proto.String("OwlCralwer"),
+		Source:     proto.String("owl-cralwer"),
 		Command: &mesos.CommandInfo{
 			Value: proto.String(executorCommand),
 			Uris:  executorUris,
