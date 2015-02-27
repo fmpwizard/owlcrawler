@@ -1,5 +1,5 @@
-owlcrawler-executor
-owlcrawler-framework
+owlcrawler-fetcher-executor
+owlcrawler-fetcher-scheduler
 owlcrawler.sublime-workspace
 owlcrawler.sublime-project
 put_msg.sh

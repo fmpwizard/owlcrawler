@@ -1,4 +1,4 @@
 #!/bin/bash
 
-go build -tags=testSched -o owlcrawler-framework owlcrawler_framework.go && \
-go build -tags=testExec -o owlcrawler-executor owlcrawler_executor.go 
+go build -tags=fetcherSched -o owlcrawler-fetcher-scheduler fetcher/owlcrawler_scheduler.go && \
+go build -tags=fetcherExec -o owlcrawler-fetcher-executor fetcher/owlcrawler_executor.go 

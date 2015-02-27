@@ -4,18 +4,18 @@ It's a distributed web crawler that uses mesos for scheduling workers, written i
 
 ## Building.
 
-Build the framework
+Build the scheduler
 
-`go build -tags=testSched -o owlcrawler-framework owlcrawler_framework.go`
+`go build -tags=fetcherSched -o owlcrawler-fetcher-scheduler fetcher/owlcrawler_scheduler.go`
 
 Build the executor
 
-`go build -tags=testExec -o owlcrawler-executor owlcrawler_executor.go`
+`go build -tags=fetcherExec -o owlcrawler-fetcher-executor fetcher/owlcrawler_executor.go`
 
 ## Run
 
 ```
-./owlcrawler-framework \
+./owlcrawler-fetcher-scheduler \
 --master=192.168.1.73:5050 \
 --executor="owlcrawler-executor" \
 --artifactPort=7070 \
