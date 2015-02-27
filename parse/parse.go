@@ -1,9 +1,7 @@
 package parse
 
 import (
-	"encoding/json"
 	"fmt"
-	"github.com/fmpwizard/owlcrawler/cloudant"
 	"golang.org/x/net/html"
 	"log"
 	"net/url"
@@ -11,12 +9,12 @@ import (
 )
 
 type PageStructure struct {
-	Title string
-	H1    []string //I know there should be just one H1 per page, but not eveyone does that
-	H2    []string
-	H3    []string
-	H4    []string
-	Text  []string
+	Title string   `json:"title,omitempty"`
+	H1    []string `json:"h1,omitempty"` //I know there should be just one H1 per page, but not eveyone does that
+	H2    []string `json:"h2,omitempty"`
+	H3    []string `json:"h3,omitempty"`
+	H4    []string `json:"h4,omitempty"`
+	Text  []string `json:"text,omitempty"`
 }
 
 type ExtractedLinks struct {
@@ -26,15 +24,10 @@ type ExtractedLinks struct {
 
 type URLFetchChecker func(url string) bool
 
-func ExtractText(payload []byte) PageStructure {
+func ExtractText(payload string) PageStructure {
 	var page PageStructure
-	var doc cloudant.CouchDoc
 
-	err := json.Unmarshal(payload, &doc)
-	if err != nil {
-		log.Printf("Error reading couch doc while trying to extract data, got: %v\n", err)
-	}
-	nodes, err := html.Parse(strings.NewReader(doc.HTML))
+	nodes, err := html.Parse(strings.NewReader(payload))
 	if err != nil {
 		log.Printf("Error parsing html, got: %+v\n", err)
 	}
@@ -63,21 +56,14 @@ func ExtractText(payload []byte) PageStructure {
 	return page
 }
 
-func ExtractLinks(payload []byte, originalURL string, shouldFetch URLFetchChecker) ExtractedLinks {
+func ExtractLinks(payload string, originalURL string, shouldFetch URLFetchChecker) ExtractedLinks {
 	link, err := url.Parse(originalURL)
 	if err != nil {
 		log.Printf("Error parsing url %s, got: %v\n", originalURL, err)
 	}
+
+	d := html.NewTokenizer(strings.NewReader(payload))
 	var extractedLinks ExtractedLinks
-	var doc cloudant.CouchDoc
-
-	err = json.Unmarshal(payload, &doc)
-	if err != nil {
-		log.Printf("Error reading couch doc while trying to extract data, got: %v\n", err)
-	}
-
-	d := html.NewTokenizer(strings.NewReader(doc.HTML))
-
 	for {
 		tokenType := d.Next()
 		if tokenType == html.ErrorToken {

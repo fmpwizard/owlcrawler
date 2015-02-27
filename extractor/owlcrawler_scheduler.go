@@ -1,4 +1,4 @@
-// +build fetcherSched
+// +build extractorSched
 
 package main
 
@@ -7,7 +7,6 @@ import (
 	"encoding/gob"
 	"flag"
 	"fmt"
-	"github.com/fmpwizard/owlcrawler/cloudant"
 	"github.com/iron-io/iron_go/mq"
 	"github.com/mesos/mesos-go/auth"
 	"github.com/mesos/mesos-go/auth/sasl"
@@ -28,7 +27,7 @@ import (
 
 const (
 	cpuPerTask = 0.5
-	memPerTask = 50
+	memPerTask = 128
 )
 
 var (
@@ -37,7 +36,7 @@ var (
 	authProvider = flag.String("mesos_authentication_provider", sasl.ProviderName,
 		fmt.Sprintf("Authentication provider to use, default is SASL that supports mechanisms: %+v", mech.ListSupported()))
 	master              = flag.String("master", "127.0.0.1:5050", "Master address <ip:port>")
-	executorPath        = flag.String("executor", "./owlcrawler-fetcher-executor", "Path to test executor")
+	executorPath        = flag.String("executor", "./test_executor", "Path to test executor")
 	mesosAuthPrincipal  = flag.String("mesos_authentication_principal", "", "Mesos authentication principal.")
 	mesosAuthSecretFile = flag.String("mesos_authentication_secret_file", "", "Mesos authentication secret file.")
 )
@@ -73,8 +72,8 @@ func (sched *ExampleScheduler) Disconnected(sched.SchedulerDriver) {}
 //ResourceOffers is where you decide if you should use resources or not.
 func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offers []*mesos.Offer) {
 
-	URLToFetchQueueName := "urls_to_fetch"
-	URLToFetchQueue := mq.New(URLToFetchQueueName)
+	HTMLToParseQueueName := "html_to_parse"
+	HTMLToParseQueue := mq.New(HTMLToParseQueueName)
 
 	for _, offer := range offers {
 		cpuResources := util.FilterResources(offer.Resources, func(res *mesos.Resource) bool {
@@ -102,7 +101,7 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 		for cpuPerTask <= remainingCpus &&
 			memPerTask <= remainingMems {
 
-			if ok, task := fetchTask(URLToFetchQueue, sched, offer.SlaveId); ok {
+			if ok, task := extractTask(HTMLToParseQueue, sched, offer.SlaveId); ok {
 				tasks = append(tasks, task)
 			}
 			remainingCpus -= cpuPerTask
@@ -116,17 +115,11 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 	}
 }
 
-func fetchTask(queue *mq.Queue, sched *ExampleScheduler, workerID *mesos.SlaveID) (bool, *mesos.TaskInfo) {
+func extractTask(queue *mq.Queue, sched *ExampleScheduler, workerID *mesos.SlaveID) (bool, *mesos.TaskInfo) {
 	msg, err := queue.Get()
 	if err != nil {
 		return false, &mesos.TaskInfo{}
-	} else {
-		if cloudant.IsURLThere(msg.Body) { //found an entry, no need to fetch it again
-			msg.Delete()
-			return false, &mesos.TaskInfo{}
-		}
 	}
-
 	sched.tasksLaunched++
 
 	taskID := &mesos.TaskID{
@@ -144,7 +137,7 @@ func fetchTask(queue *mq.Queue, sched *ExampleScheduler, workerID *mesos.SlaveID
 	}
 
 	task := &mesos.TaskInfo{
-		Name:     proto.String("own-crawler-fetch-" + taskID.GetValue()),
+		Name:     proto.String("own-crawler-extract-" + taskID.GetValue()),
 		TaskId:   taskID,
 		SlaveId:  workerID,
 		Executor: sched.executor,
@@ -212,7 +205,7 @@ func (sched *ExampleScheduler) Error(driver sched.SchedulerDriver, err string) {
 
 func init() {
 	flag.Parse()
-	log.Infoln("Initializing the Fetcher Scheduler...")
+	log.Infoln("Initializing the Extractor Scheduler...")
 }
 
 // returns (downloadURI, basename(path))
@@ -251,8 +244,8 @@ func prepareExecutorInfo() *mesos.ExecutorInfo {
 
 	// Create mesos scheduler driver.
 	return &mesos.ExecutorInfo{
-		ExecutorId: util.NewExecutorID("owl-cralwer-fetcher"),
-		Name:       proto.String("OwlCralwer Fetcher"),
+		ExecutorId: util.NewExecutorID("owl-cralwer-extractor"),
+		Name:       proto.String("OwlCralwer Extractor"),
 		Source:     proto.String("owl-cralwer"),
 		Command: &mesos.CommandInfo{
 			Value: proto.String(executorCommand),
@@ -282,7 +275,7 @@ func main() {
 	// the framework
 	fwinfo := &mesos.FrameworkInfo{
 		User: proto.String(""), // Mesos-go will fill in user.
-		Name: proto.String("Own Crawler - Fetcher"),
+		Name: proto.String("Own Crawler - Extractor"),
 	}
 
 	cred := (*mesos.Credential)(nil)

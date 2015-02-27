@@ -1,10 +1,11 @@
-// +build fetcherExec
+// +build extractorExec
 
 package main
 
 import (
 	"encoding/json"
 	"github.com/fmpwizard/owlcrawler/cloudant"
+	"github.com/fmpwizard/owlcrawler/parse"
 
 	"bytes"
 	"encoding/gob"
@@ -13,8 +14,6 @@ import (
 	"github.com/iron-io/iron_go/mq"
 	exec "github.com/mesos/mesos-go/executor"
 	mesos "github.com/mesos/mesos-go/mesosproto"
-	"io/ioutil"
-	"net/http"
 	"time"
 )
 
@@ -79,56 +78,32 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	}
 	queue := mq.New(queueMessage.QueueName)
 
-	//Fetch url
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", queueMessage.URL, nil)
+	//Fetch stored html and do extraction
+	doc, err := cloudant.GetURLData(queueMessage.URL)
 	if err != nil {
-		fmt.Printf("Error parsing url: %s, got: %v\n", queueMessage.URL, err)
-	}
-	req.Header.Set("User-Agent", "OwlCrawler - https://github.com/fmpwizard/owlcrawler")
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Printf("Error while fetching url: %s, got error: %v\n", queueMessage.URL, err)
-		err = queue.ReleaseMessage(queueMessage.ID, 0)
+		err = queue.DeleteMessage(queueMessage.ID)
 		if err != nil {
-			fmt.Printf("Error releasing message id: %s from queue, got: %v\n", queueMessage.ID, err)
+			fmt.Printf("Error deleting message id: %s from queue, got: %v\n", queueMessage.ID, err)
 		}
+		fmt.Printf("Did not find data for url: %s\n", queueMessage.URL)
 		updateStatusDied(driver, taskInfo)
 		return
+	}
+	text := parse.ExtractText(doc.HTML)
+	doc.Text = text
+	jsonDocWithText, err := json.Marshal(doc)
+	if err != nil {
+		fmt.Printf("Error generating json to save docWithText in database, got: %v\n", err)
 	}
 
-	defer resp.Body.Close()
-	htmlData, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Printf("Error while reading html for url: %s, got error: %v\n", queueMessage.URL, err)
-		err = queue.ReleaseMessage(queueMessage.ID, 0)
-		if err != nil {
-			fmt.Printf("Error releasing message id: %s from queue, got: %v\n", queueMessage.ID, err)
-		}
-		updateStatusDied(driver, taskInfo)
-		return
-	}
+	//TODO if rev does not match, retry
+	ret := cloudant.SaveExtractedText(doc.ID, jsonDocWithText)
+	fmt.Printf("ret is %+v\n", ret)
 
 	err = queue.DeleteMessage(queueMessage.ID)
 	if err != nil {
 		fmt.Printf("Error deleting message id: %s from queue, got: %v\n", queueMessage.ID, err)
 	}
-	data := &dataStore{
-		URL:  queueMessage.URL,
-		HTML: string(htmlData[:]),
-		Date: time.Now().UTC(),
-	}
-
-	pageData, err := json.Marshal(data)
-	if err != nil {
-		fmt.Printf("Error generating json to save in database, got: %v\n", err)
-	}
-
-	ret := cloudant.AddURLData(queueMessage.URL, pageData)
-
-	//Send fethed url to parse queue
-	parseHTMLQueue := mq.New("html_to_parse")
-	parseHTMLQueue.PushString(ret.ID)
 
 	// finish task
 	fmt.Println("Finishing task", taskInfo.GetName())
