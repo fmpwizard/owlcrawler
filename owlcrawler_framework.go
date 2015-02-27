@@ -280,7 +280,7 @@ func serveExecutorArtifact(path string) (*string, string) {
 	serveFile("/"+base, path)
 
 	hostURI := fmt.Sprintf("http://%s:%d/%s", *address, *artifactPort, base)
-	log.V(2).Infof("Hosting artifact '%s' at '%s'", path, hostURI)
+	log.Infof("Hosting artifact '%s' at '%s'\n", path, hostURI)
 
 	return &hostURI, base
 }
@@ -293,7 +293,7 @@ func prepareExecutorInfo() *mesos.ExecutorInfo {
 	executorCommand := fmt.Sprintf("./%s", executorCmd)
 
 	go http.ListenAndServe(fmt.Sprintf("%s:%d", *address, *artifactPort), nil)
-	log.V(2).Info("Serving executor artifacts...")
+	log.Info("Serving executor artifacts...")
 
 	// Create mesos scheduler driver.
 	return &mesos.ExecutorInfo{
