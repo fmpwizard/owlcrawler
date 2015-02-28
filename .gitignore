@@ -1,7 +1,6 @@
-owlcrawler-extractor-executor
-owlcrawler-extractor-scheduler
-owlcrawler-fetcher-executor
-owlcrawler-fetcher-scheduler
+owlcrawler-executor-extractor
+owlcrawler-executor-fetcher
+owlcrawler-scheduler
 owlcrawler.sublime-workspace
 owlcrawler.sublime-project
 put_msg.sh
