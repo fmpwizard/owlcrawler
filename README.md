@@ -6,20 +6,22 @@ It's a distributed web crawler that uses mesos for scheduling workers, written i
 
 Build the scheduler
 
-`go build -tags=fetcherSched -o owlcrawler-fetcher-scheduler fetcher/owlcrawler_scheduler.go`
+`go build -tags=fetcherSched -o owlcrawler-scheduler owlcrawler_scheduler.go`
 
-Build the executor
+Build the two executors
 
-`go build -tags=fetcherExec -o owlcrawler-fetcher-executor fetcher/owlcrawler_executor.go`
+```
+go build -tags=fetcherExec -o owlcrawler-executor-fetcher owlcrawler_executor_fetcher.go && \
+go build -tags=extractorExec -o owlcrawler-executor-extractor owlcrawler_executor_extractor.go 
+```
 
 ## Run
 
 ```
-./owlcrawler-fetcher-scheduler \
---master=192.168.1.73:5050 \
---executor="owlcrawler-executor" \
+./owlcrawler-scheduler \
+--master=127.0.0.1:5050 \
 --artifactPort=7070 \
---address=192.168.1.73 \
+--address=127.0.0.1 \
 --logtostderr=true
 
 ```
