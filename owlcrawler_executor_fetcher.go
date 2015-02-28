@@ -52,8 +52,7 @@ func (exec *exampleExecutor) Disconnected(exec.ExecutorDriver) {
 }
 
 func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
-	fmt.Println("Launching task", taskInfo.GetName(), "with command", taskInfo.Command.GetValue())
-
+	fmt.Println("Launching task", taskInfo.GetName())
 	runStatus := &mesos.TaskStatus{
 		TaskId: taskInfo.GetTaskId(),
 		State:  mesos.TaskState_TASK_RUNNING.Enum(),
@@ -64,16 +63,17 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	}
 
 	exec.tasksLaunched++
+	fetchHTML(exec, driver, taskInfo)
+}
+
+func fetchHTML(exec *exampleExecutor, driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
 	fmt.Println("Total tasks launched ", exec.tasksLaunched)
-	//
-	// this is where one would perform the requested task
-	//
 
 	//Read information about this URL we are about to process
 	payload := bytes.NewReader(taskInfo.GetData())
 	var queueMessage OwlCrawlMsg
 	dec := gob.NewDecoder(payload)
-	err = dec.Decode(&queueMessage)
+	err := dec.Decode(&queueMessage)
 	if err != nil {
 		fmt.Println("decode error:", err)
 	}
