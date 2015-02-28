@@ -88,7 +88,7 @@ func ExtractLinks(payload string, originalURL string, shouldFetch URLFetchChecke
 								extractedLinks.URL = append(extractedLinks.URL, url)
 							}
 						} else {
-							log.Printf("Not sure what to do with this url: %s\n", attribute.Val)
+							log.Printf("Ignoring url: %s\n", attribute.Val)
 						}
 					}
 				}
