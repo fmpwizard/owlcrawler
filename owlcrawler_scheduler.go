@@ -286,8 +286,8 @@ func serveExecutorArtifact(path string) (*string, string) {
 
 func prepareExecutorInfo() []*mesos.ExecutorInfo {
 	executorUris := []*mesos.CommandInfo_URI{}
-	uriFetcher, executorCmdFetcher := serveExecutorArtifact("owlcrawler-fetcher-executor")
-	uriExtractor, executorCmdExtractor := serveExecutorArtifact("owlcrawler-extractor-executor")
+	uriFetcher, executorCmdFetcher := serveExecutorArtifact("owlcrawler-executor-fetcher")
+	uriExtractor, executorCmdExtractor := serveExecutorArtifact("owlcrawler-executor-extractor")
 
 	executorUris = append(executorUris, &mesos.CommandInfo_URI{Value: uriFetcher, Executable: proto.Bool(true)})
 	executorUris = append(executorUris, &mesos.CommandInfo_URI{Value: uriExtractor, Executable: proto.Bool(true)})

@@ -62,10 +62,10 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	}
 
 	exec.tasksLaunched++
-	extractText(exec, driver, taskInfo)
+	go exec.extractText(driver, taskInfo)
 }
 
-func extractText(exec *exampleExecutor, driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
+func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
 
 	fmt.Println("Total tasks launched ", exec.tasksLaunched)
 

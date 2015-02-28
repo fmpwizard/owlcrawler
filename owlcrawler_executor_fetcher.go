@@ -63,10 +63,10 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	}
 
 	exec.tasksLaunched++
-	fetchHTML(exec, driver, taskInfo)
+	go exec.fetchHTML(driver, taskInfo)
 }
 
-func fetchHTML(exec *exampleExecutor, driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
+func (exec *exampleExecutor) fetchHTML(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
 	fmt.Println("Total tasks launched ", exec.tasksLaunched)
 
 	//Read information about this URL we are about to process
