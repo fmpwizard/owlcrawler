@@ -59,7 +59,7 @@ func ExtractText(payload string) PageStructure {
 func ExtractLinks(payload string, originalURL string, shouldFetch URLFetchChecker) ExtractedLinks {
 	link, err := url.Parse(originalURL)
 	if err != nil {
-		log.Printf("Error parsing url %s, got: %v\n", originalURL, err)
+		log.Fatalf("Error parsing url %s, got: %v\n", originalURL, err)
 	}
 
 	d := html.NewTokenizer(strings.NewReader(payload))

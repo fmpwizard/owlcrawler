@@ -2,6 +2,7 @@ package cloudant
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,7 +10,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/url"
 	"os/user"
 	"path/filepath"
 )
@@ -20,26 +20,6 @@ type cloudantCred struct {
 	User     string
 	Password string
 	URL      string
-}
-
-type couchDBFound struct {
-	Rows []struct {
-		Key   string
-		Value int
-	}
-}
-
-type couchDBByURL struct {
-	TotalRows int64 `json:"total_rows"`
-	Offset    int64 `json:"offset"`
-	Rows      []struct {
-		ID    string
-		Key   string
-		Value struct {
-			HTML string
-			Rev  string
-		}
-	}
 }
 
 //CouchDoc represents a response fron CouchDB
@@ -75,7 +55,7 @@ func init() {
 }
 
 //AddURLData adds the url and data to the database. data is json encoded.
-func AddURLData(url string, data []byte) CouchDocCreated {
+func AddURLData(url string, data []byte) (CouchDocCreated, error) {
 	client := &http.Client{}
 	document := bytes.NewReader(data)
 	req, err := http.NewRequest("POST", cloudantCredentials.URL, document)
@@ -90,6 +70,9 @@ func AddURLData(url string, data []byte) CouchDocCreated {
 	if err != nil {
 		log.Printf("Error sending request to Cloudant, got: %v\n", err)
 	}
+	if resp.StatusCode == 409 {
+		return CouchDocCreated{}, errors.New("Already saved.")
+	}
 	var ret CouchDocCreated
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -99,15 +82,15 @@ func AddURLData(url string, data []byte) CouchDocCreated {
 	if err != nil {
 		log.Printf("Error serializing from json to a CouchDocCreated, got: %v\n", err)
 	}
-	defer resp.Body.Close()
+	resp.Body.Close()
 	log.Printf("AddURLData respose was %+v\n", resp)
-	return ret
+	return ret, nil
 }
 
-func SaveExtractedText(docID string, data []byte) CouchDocCreated {
+func SaveExtractedText(docID string, data []byte) (CouchDocCreated, error) {
 	client := &http.Client{}
 	document := bytes.NewReader(data)
-	req, err := http.NewRequest("PUT", cloudantCredentials.URL+"/"+docID, document)
+	req, err := http.NewRequest("PUT", cloudantCredentials.URL+"/"+base64.URLEncoding.EncodeToString([]byte(docID)), document)
 	if err != nil {
 		log.Printf("Error parsing url, got: %v\n", err)
 	}
@@ -125,7 +108,7 @@ func SaveExtractedText(docID string, data []byte) CouchDocCreated {
 		log.Printf("Error parsing result of saving document, got: %v\n", err)
 	}
 	if resp.StatusCode == 409 {
-		log.Fatalln("Error updating extracted text, not latest revision")
+		return CouchDocCreated{}, errors.New("Not latest revision.")
 	}
 	err = json.Unmarshal(body, &ret)
 	if err != nil {
@@ -134,14 +117,15 @@ func SaveExtractedText(docID string, data []byte) CouchDocCreated {
 	defer resp.Body.Close()
 	log.Printf("SaveExtractedText respose was %+v\n", resp)
 	log.Printf("Body: %+v\n", string(body))
-	return ret
+	return ret, nil
 }
 
 //GetURLData gets the data stored in Couch, does a lookup by doc id
 func GetURLData(id string) (CouchDoc, error) {
 	client := &http.Client{}
-	url := cloudantCredentials.URL + "/" + id
-	req, err := http.NewRequest("GET", url, nil)
+	docURL := cloudantCredentials.URL + "/" + id
+	log.Println("============ ", docURL)
+	req, err := http.NewRequest("GET", docURL, nil)
 	if err != nil {
 		log.Printf("Error parsing url, got: %v\n", err)
 		return CouchDoc{}, err
@@ -155,9 +139,6 @@ func GetURLData(id string) (CouchDoc, error) {
 		return CouchDoc{}, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode == 404 {
-		return CouchDoc{}, errors.New(fmt.Sprintf("Doc id: %s not found.", id))
-	}
 
 	var result CouchDoc
 	body, err := ioutil.ReadAll(resp.Body)
@@ -165,17 +146,23 @@ func GetURLData(id string) (CouchDoc, error) {
 		log.Printf("\n\nError reading body response from GetURLData %v\n", err)
 		return CouchDoc{}, err
 	}
+	log.Printf("*********** %+v", string(body))
 	err = json.Unmarshal(body, &result)
 	if err != nil {
 		log.Printf("\n\nError unmarshalling GetURLData body:\n%s\n into a struct, got: %v\n", string(body), err)
 	}
+	if resp.StatusCode == 404 {
+		return CouchDoc{}, errors.New(fmt.Sprintf("Doc id: %s not found.\n", id))
+	}
+
 	return result, nil
 }
 
 //IsURLThere checks if the given url is already stored in the database
 func IsURLThere(storedURL string) bool {
 	client := &http.Client{}
-	url := cloudantCredentials.URL + "/_design/by-url/_view/by-url?key=\"" + url.QueryEscape(storedURL) + "\""
+	//url := cloudantCredentials.URL + "/" + base64.URLEncoding.EncodeToString([]byte(storedURL))
+	url := cloudantCredentials.URL + "/" + storedURL
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		log.Printf("Error parsing url, got: %v\n", err)
@@ -187,18 +174,8 @@ func IsURLThere(storedURL string) bool {
 	if err != nil {
 		log.Printf("Error sending request to Cloudant, got: %v\n", err)
 	}
-	defer resp.Body.Close()
-
-	var result couchDBFound
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Error reading body response from IsURLThere %v\n", err)
-	}
-	err = json.Unmarshal(body, &result)
-	if err != nil {
-		log.Printf("Error unmarshalling IsURLThere body into a struct, got: %v\n", err)
-	}
-	return len(result.Rows) > 0
+	resp.Body.Close()
+	return resp.StatusCode != 404
 }
 
 /*Design views:

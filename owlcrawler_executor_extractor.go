@@ -3,18 +3,17 @@
 package main
 
 import (
-	"encoding/json"
 	"github.com/fmpwizard/owlcrawler/cloudant"
 	"github.com/fmpwizard/owlcrawler/parse"
 
 	"bytes"
 	"encoding/gob"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/iron-io/iron_go/mq"
 	exec "github.com/mesos/mesos-go/executor"
 	mesos "github.com/mesos/mesos-go/mesosproto"
-	"time"
 )
 
 type exampleExecutor struct {
@@ -28,10 +27,8 @@ type OwlCrawlMsg struct {
 	QueueName string
 }
 
-type dataStore struct {
-	URL  string    `json:"url"`
-	HTML string    `json:"html"`
-	Date time.Time `json:"date"`
+var fn = func(url string) bool {
+	return !cloudant.IsURLThere(url)
 }
 
 func newExampleExecutor() *exampleExecutor {
@@ -51,7 +48,7 @@ func (exec *exampleExecutor) Disconnected(exec.ExecutorDriver) {
 }
 
 func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
-	fmt.Println("Launching task", taskInfo.GetName(), "with command", taskInfo.Command.GetValue())
+	fmt.Println("Launching task", taskInfo.GetName())
 	runStatus := &mesos.TaskStatus{
 		TaskId: taskInfo.GetTaskId(),
 		State:  mesos.TaskState_TASK_RUNNING.Enum(),
@@ -66,7 +63,6 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 }
 
 func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
-
 	fmt.Println("Total tasks launched ", exec.tasksLaunched)
 
 	//Read information about this URL we are about to process
@@ -78,39 +74,58 @@ func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *m
 		fmt.Println("decode error:", err)
 	}
 	queue := mq.New(queueMessage.QueueName)
+	if queueMessage.URL == "" {
+		runStatus := &mesos.TaskStatus{
+			TaskId: taskInfo.GetTaskId(),
+			State:  mesos.TaskState_TASK_FINISHED.Enum(),
+		}
+		_, err := driver.SendStatusUpdate(runStatus)
+		if err != nil {
+			fmt.Printf("Failed to tell mesos that we were done, sorry, got: %v", err)
+		}
+		_ = queue.DeleteMessage(queueMessage.ID)
+		return
+	}
 
 	//Fetch stored html and do extraction
+	fmt.Printf("/////////////queueMessage.URL %+v\n", queueMessage.URL)
+
+	//TODO refactor out
 	doc, err := cloudant.GetURLData(queueMessage.URL)
 	if err != nil {
+		fmt.Printf("Error was: %+v\n", err)
+		fmt.Printf("Doc was: %+v\n", doc)
 		err = queue.DeleteMessage(queueMessage.ID)
 		if err != nil {
 			fmt.Printf("Error deleting message id: %s from queue, got: %v\n", queueMessage.ID, err)
 		}
 		fmt.Printf("Did not find data for url: %s\n", queueMessage.URL)
-		updateStatusDied(driver, taskInfo)
+		runStatus := &mesos.TaskStatus{
+			TaskId: taskInfo.GetTaskId(),
+			State:  mesos.TaskState_TASK_FAILED.Enum(),
+		}
+		_, err := driver.SendStatusUpdate(runStatus)
+		if err != nil {
+			fmt.Printf("Failed to tell mesos that we died, sorry, got: %v", err)
+		}
 		return
 	}
+	//End of refactor out
+
 	text := parse.ExtractText(doc.HTML)
-	fn := func(url string) bool {
-		return !cloudant.IsURLThere(url)
-	}
+
 	links := parse.ExtractLinks(doc.HTML, doc.URL, fn)
 	doc.Text = text
 	doc.Links = links.URL
+
+	//TODO if rev does not match, retry
+	saveExtractedData()
+
 	urlToFetchQueue := mq.New("urls_to_fetch")
 
 	for _, u := range links.URL {
 		urlToFetchQueue.PushString(u)
 	}
-
-	jsonDocWithText, err := json.Marshal(doc)
-	if err != nil {
-		fmt.Printf("Error generating json to save docWithText in database, got: %v\n", err)
-	}
-
-	//TODO if rev does not match, retry
-	ret := cloudant.SaveExtractedText(doc.ID, jsonDocWithText)
-	fmt.Printf("ret is %+v\n", ret)
 
 	err = queue.DeleteMessage(queueMessage.ID)
 	if err != nil {
@@ -128,6 +143,45 @@ func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *m
 		fmt.Println("Got error", err)
 	}
 	fmt.Println("Task finished", taskInfo.GetName())
+}
+
+func saveExtractedData() {
+	jsonDocWithText, err := json.Marshal(doc)
+	if err != nil {
+		fmt.Printf("Error generating json to save docWithText in database, got: %v\n", err)
+	}
+	ret, err := cloudant.SaveExtractedText(doc.ID, jsonDocWithText)
+	if err != nil {
+		innerDoc, err := cloudant.GetURLData(queueMessage.URL)
+		if err != nil {
+			fmt.Printf("Error was: %+v\n", err)
+			fmt.Printf("Doc was: %+v\n", doc)
+			err = queue.DeleteMessage(queueMessage.ID)
+			if err != nil {
+				fmt.Printf("Error deleting message id: %s from queue, got: %v\n", queueMessage.ID, err)
+			}
+			fmt.Printf("Did not find data for url: %s\n", queueMessage.URL)
+			runStatus := &mesos.TaskStatus{
+				TaskId: taskInfo.GetTaskId(),
+				State:  mesos.TaskState_TASK_FAILED.Enum(),
+			}
+			_, err := driver.SendStatusUpdate(runStatus)
+			if err != nil {
+				fmt.Printf("Failed to tell mesos that we died, sorry, got: %v", err)
+			}
+			return
+		}
+		doc.Rev = innerDoc.Rev
+		jsonDocWithText, _ = json.Marshal(doc)
+		ret, err := cloudant.SaveExtractedText(doc.ID, jsonDocWithText)
+		if err != nil {
+			fmt.Printf("HUGE ERROR! %v\n", err)
+		}
+		fmt.Printf("second ret is %+v\n", ret)
+
+	}
+	fmt.Printf("ret is %+v\n", ret)
+
 }
 
 func (exec *exampleExecutor) KillTask(exec.ExecutorDriver, *mesos.TaskID) {
@@ -170,16 +224,4 @@ func main() {
 	}
 	fmt.Println("Executor process has started and running.")
 	driver.Join()
-}
-
-func updateStatusDied(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
-	runStatus := &mesos.TaskStatus{
-		TaskId: taskInfo.GetTaskId(),
-		State:  mesos.TaskState_TASK_FAILED.Enum(),
-	}
-	_, err := driver.SendStatusUpdate(runStatus)
-	if err != nil {
-		fmt.Printf("Failed to tell mesos that we died, sorry, got: %v", err)
-	}
-
 }

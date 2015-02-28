@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"github.com/fmpwizard/owlcrawler/cloudant"
 
@@ -30,6 +31,7 @@ type OwlCrawlMsg struct {
 }
 
 type dataStore struct {
+	ID   string    `json:"_id"`
 	URL  string    `json:"url"`
 	HTML string    `json:"html"`
 	Date time.Time `json:"date"`
@@ -114,6 +116,7 @@ func (exec *exampleExecutor) fetchHTML(driver exec.ExecutorDriver, taskInfo *mes
 		fmt.Printf("Error deleting message id: %s from queue, got: %v\n", queueMessage.ID, err)
 	}
 	data := &dataStore{
+		ID:   base64.URLEncoding.EncodeToString([]byte(queueMessage.URL)),
 		URL:  queueMessage.URL,
 		HTML: string(htmlData[:]),
 		Date: time.Now().UTC(),
@@ -124,11 +127,12 @@ func (exec *exampleExecutor) fetchHTML(driver exec.ExecutorDriver, taskInfo *mes
 		fmt.Printf("Error generating json to save in database, got: %v\n", err)
 	}
 
-	ret := cloudant.AddURLData(queueMessage.URL, pageData)
-
-	//Send fethed url to parse queue
-	parseHTMLQueue := mq.New("html_to_parse")
-	parseHTMLQueue.PushString(ret.ID)
+	ret, err := cloudant.AddURLData(queueMessage.URL, pageData)
+	if err == nil {
+		//Send fethed url to parse queue
+		parseHTMLQueue := mq.New("html_to_parse")
+		parseHTMLQueue.PushString(ret.ID)
+	}
 
 	// finish task
 	fmt.Println("Finishing task", taskInfo.GetName())
