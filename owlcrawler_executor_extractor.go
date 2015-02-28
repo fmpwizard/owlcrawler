@@ -91,7 +91,18 @@ func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *m
 		return
 	}
 	text := parse.ExtractText(doc.HTML)
+	fn := func(url string) bool {
+		return !cloudant.IsURLThere(url)
+	}
+	links := parse.ExtractLinks(doc.HTML, doc.URL, fn)
 	doc.Text = text
+	doc.Links = links.URL
+	urlToFetchQueue := mq.New("urls_to_fetch")
+
+	for _, u := range links.URL {
+		urlToFetchQueue.PushString(u)
+	}
+
 	jsonDocWithText, err := json.Marshal(doc)
 	if err != nil {
 		fmt.Printf("Error generating json to save docWithText in database, got: %v\n", err)

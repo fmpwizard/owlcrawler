@@ -44,11 +44,12 @@ type couchDBByURL struct {
 
 //CouchDoc represents a response fron CouchDB
 type CouchDoc struct {
-	ID   string              `json:"_id"`
-	Rev  string              `json:"_rev"`
-	URL  string              `json:"url"`
-	HTML string              `json:"html"`
-	Text parse.PageStructure `json:"text"`
+	ID    string              `json:"_id"`
+	Rev   string              `json:"_rev"`
+	URL   string              `json:"url"`
+	HTML  string              `json:"html"`
+	Text  parse.PageStructure `json:"text"`
+	Links []string            `json:"links"`
 }
 
 //CouchDocCreated represents a full document

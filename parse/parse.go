@@ -97,7 +97,3 @@ func ExtractLinks(payload string, originalURL string, shouldFetch URLFetchChecke
 	}
 	return extractedLinks
 }
-
-/*func ShouldFetchURL(url string) bool {
-	return !cloudant.IsURLThere(url)
-}*/
