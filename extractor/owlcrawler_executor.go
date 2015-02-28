@@ -140,7 +140,7 @@ func init() {
 }
 
 func main() {
-	fmt.Println("Starting Example Executor (Go)")
+	fmt.Println("Starting Extractor Executor")
 
 	dconfig := exec.DriverConfig{
 		Executor: newExampleExecutor(),

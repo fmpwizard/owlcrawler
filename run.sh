@@ -6,7 +6,6 @@ set -e
 
 ./owlcrawler-fetcher-scheduler \
 --master=192.168.1.73:5050 \
---executor="owlcrawler-fetcher-executor" \
 --artifactPort=7070 \
 --address=192.168.1.73 \
 --logtostderr=true

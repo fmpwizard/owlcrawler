@@ -37,7 +37,6 @@ var (
 	authProvider = flag.String("mesos_authentication_provider", sasl.ProviderName,
 		fmt.Sprintf("Authentication provider to use, default is SASL that supports mechanisms: %+v", mech.ListSupported()))
 	master              = flag.String("master", "127.0.0.1:5050", "Master address <ip:port>")
-	executorPath        = flag.String("executor", "./owlcrawler-fetcher-executor", "Path to test executor")
 	mesosAuthPrincipal  = flag.String("mesos_authentication_principal", "", "Mesos authentication principal.")
 	mesosAuthSecretFile = flag.String("mesos_authentication_secret_file", "", "Mesos authentication secret file.")
 )
@@ -75,6 +74,8 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 
 	URLToFetchQueueName := "urls_to_fetch"
 	URLToFetchQueue := mq.New(URLToFetchQueueName)
+	HTMLToParseQueueName := "html_to_parse"
+	HTMLToParseQueue := mq.New(HTMLToParseQueueName)
 
 	for _, offer := range offers {
 		cpuResources := util.FilterResources(offer.Resources, func(res *mesos.Resource) bool {
@@ -102,11 +103,20 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 		for cpuPerTask <= remainingCpus &&
 			memPerTask <= remainingMems {
 
-			if ok, task := fetchTask(URLToFetchQueue, sched, offer.SlaveId); ok {
-				tasks = append(tasks, task)
+			if sched.executor.GetExecutorId().GetValue() == "owl-cralwer-fetcher" {
+				if ok, task := fetchTask(URLToFetchQueue, sched, offer.SlaveId); ok {
+					tasks = append(tasks, task)
+				}
+				remainingCpus -= cpuPerTask
+				remainingMems -= memPerTask
+			} else if sched.executor.GetExecutorId().GetValue() == "owl-cralwer-extractor" {
+				if ok, task := extractTask(HTMLToParseQueue, sched, offer.SlaveId); ok {
+					tasks = append(tasks, task)
+				}
+				remainingCpus -= cpuPerTask
+				remainingMems -= memPerTask
 			}
-			remainingCpus -= cpuPerTask
-			remainingMems -= memPerTask
+
 		}
 		if len(tasks) > 0 {
 			log.Infoln("Launching ", len(tasks), "tasks for offer", offer.Id.GetValue())
@@ -114,6 +124,41 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 
 		driver.LaunchTasks([]*mesos.OfferID{offer.Id}, tasks, &mesos.Filters{RefuseSeconds: proto.Float64(1)})
 	}
+}
+
+func extractTask(queue *mq.Queue, sched *ExampleScheduler, workerID *mesos.SlaveID) (bool, *mesos.TaskInfo) {
+	msg, err := queue.Get()
+	if err != nil {
+		return false, &mesos.TaskInfo{}
+	}
+	sched.tasksLaunched++
+
+	taskID := &mesos.TaskID{
+		Value: proto.String(strconv.Itoa(sched.tasksLaunched)),
+	}
+	var msgAndID bytes.Buffer
+	enc := gob.NewEncoder(&msgAndID)
+	err = enc.Encode(OwlCrawlMsg{
+		URL:       msg.Body,
+		ID:        msg.Id,
+		QueueName: queue.Name,
+	})
+	if err != nil {
+		log.Fatal("encode error:", err)
+	}
+
+	task := &mesos.TaskInfo{
+		Name:     proto.String("own-crawler-extract-" + taskID.GetValue()),
+		TaskId:   taskID,
+		SlaveId:  workerID,
+		Executor: sched.executor,
+		Resources: []*mesos.Resource{
+			util.NewScalarResource("cpus", cpuPerTask),
+			util.NewScalarResource("mem", memPerTask),
+		},
+		Data: msgAndID.Bytes(),
+	}
+	return true, task
 }
 
 func fetchTask(queue *mq.Queue, sched *ExampleScheduler, workerID *mesos.SlaveID) (bool, *mesos.TaskInfo) {
@@ -239,26 +284,42 @@ func serveExecutorArtifact(path string) (*string, string) {
 	return &hostURI, base
 }
 
-func prepareExecutorInfo() *mesos.ExecutorInfo {
+func prepareExecutorInfo() []*mesos.ExecutorInfo {
 	executorUris := []*mesos.CommandInfo_URI{}
-	uri, executorCmd := serveExecutorArtifact(*executorPath)
-	executorUris = append(executorUris, &mesos.CommandInfo_URI{Value: uri, Executable: proto.Bool(true)})
+	uriFetcher, executorCmdFetcher := serveExecutorArtifact("owlcrawler-fetcher-executor")
+	uriExtractor, executorCmdExtractor := serveExecutorArtifact("owlcrawler-extractor-executor")
 
-	executorCommand := fmt.Sprintf("./%s", executorCmd)
+	executorUris = append(executorUris, &mesos.CommandInfo_URI{Value: uriFetcher, Executable: proto.Bool(true)})
+	executorUris = append(executorUris, &mesos.CommandInfo_URI{Value: uriExtractor, Executable: proto.Bool(true)})
+
+	fetcherExecutorCommand := fmt.Sprintf("./%s", executorCmdFetcher)
+	extractorExecutorCommand := fmt.Sprintf("./%s", executorCmdExtractor)
 
 	go http.ListenAndServe(fmt.Sprintf("%s:%d", *address, *artifactPort), nil)
 	log.Info("Serving executor artifacts...")
 
 	// Create mesos scheduler driver.
-	return &mesos.ExecutorInfo{
+	fetcherExe := &mesos.ExecutorInfo{
 		ExecutorId: util.NewExecutorID("owl-cralwer-fetcher"),
 		Name:       proto.String("OwlCralwer Fetcher"),
 		Source:     proto.String("owl-cralwer"),
 		Command: &mesos.CommandInfo{
-			Value: proto.String(executorCommand),
+			Value: proto.String(fetcherExecutorCommand),
 			Uris:  executorUris,
 		},
 	}
+
+	extractorExe := &mesos.ExecutorInfo{
+		ExecutorId: util.NewExecutorID("owl-cralwer-extractor"),
+		Name:       proto.String("OwlCralwer Fetcher"),
+		Source:     proto.String("owl-cralwer"),
+		Command: &mesos.CommandInfo{
+			Value: proto.String(extractorExecutorCommand),
+			Uris:  executorUris,
+		},
+	}
+
+	return []*mesos.ExecutorInfo{fetcherExe, extractorExe}
 }
 
 func parseIP(address string) net.IP {
@@ -279,10 +340,17 @@ func main() {
 	// build command executor
 	exec := prepareExecutorInfo()
 
+	go startSchedulerDriver(exec[0])
+	startSchedulerDriver(exec[1])
+
+}
+
+func startSchedulerDriver(exec *mesos.ExecutorInfo) {
 	// the framework
+
 	fwinfo := &mesos.FrameworkInfo{
 		User: proto.String(""), // Mesos-go will fill in user.
-		Name: proto.String("Own Crawler - Fetcher"),
+		Name: proto.String("Own Crawler - " + exec.GetExecutorId().GetValue()),
 	}
 
 	cred := (*mesos.Credential)(nil)
@@ -311,6 +379,7 @@ func main() {
 			return ctx
 		},
 	}
+	log.Infof("Starting %+v\n", exec.GetExecutorId())
 	driver, err := sched.NewMesosSchedulerDriver(config)
 	if err != nil {
 		log.Errorln("Unable to create a SchedulerDriver ", err.Error())
@@ -319,7 +388,6 @@ func main() {
 	if stat, err := driver.Run(); err != nil {
 		log.Infof("Framework stopped with status %s and error: %s\n", stat.String(), err.Error())
 	}
-
 }
 
 //OwlCrawlMsg is used to pass info to the executor
