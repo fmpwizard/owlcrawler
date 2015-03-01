@@ -12,7 +12,7 @@ import (
 
 type PageStructure struct {
 	Title string   `json:"title,omitempty"`
-	H1    []string `json:"h1,omitempty"` //I know there should be just one H1 per page, but not eveyone does that
+	H1    []string `json:"h1,omitempty"`
 	H2    []string `json:"h2,omitempty"`
 	H3    []string `json:"h3,omitempty"`
 	H4    []string `json:"h4,omitempty"`

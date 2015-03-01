@@ -66,7 +66,6 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 }
 
 func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
-
 	//Read information about this URL we are about to process
 	payload := bytes.NewReader(taskInfo.GetData())
 	var queueMessage OwlCrawlMsg
@@ -125,6 +124,7 @@ func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *m
 	}
 	log.V(2).Infof("Task finished %s\n", taskInfo.GetName())
 }
+
 func extractData(doc cloudant.CouchDoc) cloudant.CouchDoc {
 	doc.Text = parse.ExtractText(doc.HTML)
 	fetch, storing := parse.ExtractLinks(doc.HTML, doc.URL, fn)

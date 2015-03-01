@@ -106,15 +106,15 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 			if sched.executor.GetExecutorId().GetValue() == "owl-cralwer-fetcher" {
 				if ok, task := fetchTask(URLToFetchQueue, sched, offer.SlaveId); ok {
 					tasks = append(tasks, task)
+					remainingCpus -= cpuPerTask
+					remainingMems -= memPerTask
 				}
-				remainingCpus -= cpuPerTask
-				remainingMems -= memPerTask
 			} else if sched.executor.GetExecutorId().GetValue() == "owl-cralwer-extractor" {
 				if ok, task := extractTask(HTMLToParseQueue, sched, offer.SlaveId); ok {
 					tasks = append(tasks, task)
+					remainingCpus -= cpuPerTask
+					remainingMems -= memPerTask
 				}
-				remainingCpus -= cpuPerTask
-				remainingMems -= memPerTask
 			}
 
 		}
