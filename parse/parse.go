@@ -3,6 +3,7 @@ package parse
 import (
 	"fmt"
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 	"log"
 	"net/url"
 	"strings"
@@ -24,7 +25,7 @@ type ExtractedLinks struct {
 
 type URLFetchChecker func(url string) bool
 
-func ExtractText(payload string) PageStructure {
+/*func ExtractText(payload string) PageStructure {
 	var page PageStructure
 
 	nodes, err := html.Parse(strings.NewReader(payload))
@@ -34,7 +35,7 @@ func ExtractText(payload string) PageStructure {
 	var f func(*html.Node)
 	f = func(n *html.Node) {
 		if n.Type == html.ElementNode {
-			if n.Data == "title" {
+			if n.Data == "title" && n.FirstChild != nil {
 				page.Title = n.FirstChild.Data
 			} else if n.Data == "h1" {
 				page.H1 = append(page.H1, n.FirstChild.Data)
@@ -54,7 +55,83 @@ func ExtractText(payload string) PageStructure {
 	}
 	f(nodes)
 	return page
+}*/
+
+func ExtractText(payload string) PageStructure {
+	var page PageStructure
+
+	d := html.NewTokenizer(strings.NewReader(payload))
+	var tok atom.Atom
+	for {
+		tokenType := d.Next()
+		if tokenType == html.ErrorToken {
+			return page
+		}
+		token := d.Token()
+		switch tokenType {
+		case html.StartTagToken:
+			if token.DataAtom == atom.Title {
+				tok = atom.Title
+			} else if token.DataAtom == atom.H1 {
+				tok = atom.H1
+			} else if token.DataAtom == atom.H2 {
+				tok = atom.H2
+			} else if token.DataAtom == atom.H3 {
+				tok = atom.H3
+			} else if token.DataAtom == atom.H4 {
+				tok = atom.H4
+			} else {
+				tok = 0
+			}
+		case html.EndTagToken:
+			tok = 0
+		case html.TextToken:
+			if txt := strings.TrimSpace(token.Data); len(txt) > 0 && tok == atom.Title {
+				page.Title = txt
+			} else if txt := strings.TrimSpace(token.Data); len(txt) > 0 && tok == atom.H1 {
+				page.H1 = append(page.H1, txt)
+			} else if txt := strings.TrimSpace(token.Data); len(txt) > 0 && tok == atom.H2 {
+				page.H2 = append(page.H2, txt)
+			} else if txt := strings.TrimSpace(token.Data); len(txt) > 0 && tok == atom.H3 {
+				page.H3 = append(page.H3, txt)
+			} else if txt := strings.TrimSpace(token.Data); len(txt) > 0 && tok == atom.H4 {
+				page.H4 = append(page.H4, txt)
+			} else if txt := strings.TrimSpace(token.Data); len(txt) > 0 {
+				page.Text = append(page.Text, txt)
+			}
+		}
+	}
+	return page
 }
+
+/*
+	nodes, err := html.Parse(strings.NewReader(payload))
+	if err != nil {
+		log.Printf("Error parsing html, got: %+v\n", err)
+	}
+	var f func(*html.Node)
+	f = func(n *html.Node) {
+		if n.Type == html.ElementNode {
+			if n.Data == "title" && n.FirstChild != nil {
+				page.Title = n.FirstChild.Data
+			} else if n.Data == "h1" {
+				page.H1 = append(page.H1, n.FirstChild.Data)
+			} else if n.Data == "h2" {
+				page.H2 = append(page.H2, n.FirstChild.Data)
+			} else if n.Data == "h3" {
+				page.H3 = append(page.H3, n.FirstChild.Data)
+			} else if n.Data == "h4" {
+				page.H4 = append(page.H4, n.FirstChild.Data)
+			} else if n.FirstChild != nil && strings.TrimSpace(n.FirstChild.Data) != "" {
+				page.Text = append(page.Text, n.FirstChild.Data)
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			f(c)
+		}
+	}
+	f(nodes)
+	return page*/
 
 func ExtractLinks(payload string, originalURL string, shouldFetch URLFetchChecker) (toFetch ExtractedLinks, toStore ExtractedLinks) {
 	link, err := url.Parse(originalURL)
