@@ -297,8 +297,8 @@ func prepareExecutorInfo() []*mesos.ExecutorInfo {
 	executorUris = append(executorUris, &mesos.CommandInfo_URI{Value: uriFetcher, Executable: proto.Bool(true)})
 	executorUris = append(executorUris, &mesos.CommandInfo_URI{Value: uriExtractor, Executable: proto.Bool(true)})
 
-	fetcherExecutorCommand := fmt.Sprintf("./%s", executorCmdFetcher)
-	extractorExecutorCommand := fmt.Sprintf("./%s", executorCmdExtractor)
+	fetcherExecutorCommand := fmt.Sprintf("./%s %s %s", executorCmdFetcher, "-v=2", "--logtostderr=true")
+	extractorExecutorCommand := fmt.Sprintf("./%s %s %s", executorCmdExtractor, "-v=2", "--logtostderr=true")
 
 	go http.ListenAndServe(fmt.Sprintf("%s:%d", *address, *artifactPort), nil)
 	log.Info("Serving executor artifacts...")

@@ -38,19 +38,19 @@ func newExampleExecutor() *exampleExecutor {
 }
 
 func (exec *exampleExecutor) Registered(driver exec.ExecutorDriver, execInfo *mesos.ExecutorInfo, fwinfo *mesos.FrameworkInfo, slaveInfo *mesos.SlaveInfo) {
-	log.V(3).Infof("Registered Executor on slave ", slaveInfo.GetHostname())
+	log.V(3).Infoln("Registered Executor on slave ", slaveInfo.GetHostname())
 }
 
 func (exec *exampleExecutor) Reregistered(driver exec.ExecutorDriver, slaveInfo *mesos.SlaveInfo) {
-	log.V(3).Infof("Re-registered Executor on slave ", slaveInfo.GetHostname())
+	log.V(3).Infoln("Re-registered Executor on slave ", slaveInfo.GetHostname())
 }
 
 func (exec *exampleExecutor) Disconnected(exec.ExecutorDriver) {
-	log.V(3).Infof("Executor disconnected.")
+	log.V(3).Infoln("Executor disconnected.")
 }
 
 func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
-	log.V(2).Infof("Launching task", taskInfo.GetName())
+	log.V(2).Infof("Launching task %s\n", taskInfo.GetName())
 	runStatus := &mesos.TaskStatus{
 		TaskId: taskInfo.GetTaskId(),
 		State:  mesos.TaskState_TASK_RUNNING.Enum(),
@@ -61,7 +61,7 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	}
 
 	exec.tasksLaunched++
-	log.V(2).Infof("Total tasks launched ", exec.tasksLaunched)
+	log.V(2).Infof("Total tasks launched %s\n", exec.tasksLaunched)
 	exec.extractText(driver, taskInfo)
 }
 
@@ -83,14 +83,11 @@ func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *m
 		}
 		_, err := driver.SendStatusUpdate(runStatus)
 		if err != nil {
-			fmt.Printf("Failed to tell mesos that we were done, sorry, got: %v", err)
+			log.Errorf("Failed to tell mesos that we were done, sorry, got: %v", err)
 		}
 		_ = queue.DeleteMessage(queueMessage.ID)
 		return
 	}
-
-	//Fetch stored html and do extraction
-	fmt.Printf("/////////////queueMessage.URL %+v\n", queueMessage.URL)
 
 	doc, err := getStoredHTMLForURL(queueMessage.URL)
 	if err != nil {
@@ -100,7 +97,7 @@ func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *m
 		if err == cloudant.ERROR_NO_LATEST_VERSION {
 			doc, err = getStoredHTMLForURL(queueMessage.URL)
 			if err != nil {
-				fmt.Printf("Failed to get latest version of %s\n", queueMessage.URL)
+				log.Errorf("Failed to get latest version of %s\n", queueMessage.URL)
 				queue.DeleteMessage(queueMessage.ID)
 				return
 			}
@@ -113,7 +110,7 @@ func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *m
 			}
 			_, err := driver.SendStatusUpdate(runStatus)
 			if err != nil {
-				fmt.Printf("Failed to tell mesos that we died, sorry, got: %v", err)
+				log.Errorf("Failed to tell mesos that we died, sorry, got: %v", err)
 			}
 		}
 	}
@@ -126,7 +123,7 @@ func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *m
 	if err != nil {
 		log.Errorln("Got error", err)
 	}
-	log.V(2).Infof("Task finished", taskInfo.GetName())
+	log.V(2).Infof("Task finished %s\n", taskInfo.GetName())
 }
 func extractData(doc cloudant.CouchDoc) cloudant.CouchDoc {
 	doc.Text = parse.ExtractText(doc.HTML)
@@ -150,11 +147,11 @@ func saveExtractedData(doc cloudant.CouchDoc) error {
 		return cloudant.ERROR_NO_LATEST_VERSION
 	}
 	if err != nil {
-		fmt.Printf("Error was: %+v\n", err)
-		fmt.Printf("Doc was: %+v\n", doc)
+		log.Errorf("Error was: %+v\n", err)
+		log.Errorf("Doc was: %+v\n", doc)
 		return err
 	}
-	fmt.Printf("saveExtractedData gave: %+v\n", ret)
+	log.V(3).Infof("saveExtractedData gave: %+v\n", ret)
 	return nil
 }
 
@@ -164,27 +161,27 @@ func getStoredHTMLForURL(url string) (cloudant.CouchDoc, error) {
 		return doc, cloudant.ERROR_404
 	}
 	if err != nil {
-		fmt.Printf("Error was: %+v\n", err)
-		fmt.Printf("Doc was: %+v\n", doc)
+		log.Errorf("Error was: %+v\n", err)
+		log.Errorf("Doc was: %+v\n", doc)
 		return doc, err
 	}
 	return doc, nil
 }
 
 func (exec *exampleExecutor) KillTask(exec.ExecutorDriver, *mesos.TaskID) {
-	log.V(3).Infof("Kill task")
+	log.V(3).Infoln("Kill task")
 }
 
 func (exec *exampleExecutor) FrameworkMessage(driver exec.ExecutorDriver, msg string) {
-	log.V(3).Infof("Got framework message: ", msg)
+	log.V(3).Infoln("Got framework message: ", msg)
 }
 
 func (exec *exampleExecutor) Shutdown(exec.ExecutorDriver) {
-	log.V(3).Infof("Shutting down the executor ")
+	log.V(3).Infoln("Shutting down the executor ")
 }
 
 func (exec *exampleExecutor) Error(driver exec.ExecutorDriver, err string) {
-	log.V(3).Infof("Got error message:", err)
+	log.Errorln("Got error message:", err)
 }
 
 // -------------------------- func inits () ----------------- //
@@ -193,7 +190,7 @@ func init() {
 }
 
 func main() {
-	log.V(2).Infof("Starting Extractor Executor")
+	log.V(2).Infoln("Starting Extractor Executor")
 
 	dconfig := exec.DriverConfig{
 		Executor: newExampleExecutor(),
