@@ -131,6 +131,11 @@ func extractTask(queue *mq.Queue, sched *ExampleScheduler, workerID *mesos.Slave
 	if err != nil {
 		return false, &mesos.TaskInfo{}
 	}
+	if cloudant.IsItParsed(msg.Body) {
+		log.Infof("Not going to re parse %s\n", msg.Body)
+		msg.Delete()
+		return false, &mesos.TaskInfo{}
+	}
 	sched.tasksLaunched++
 
 	taskID := &mesos.TaskID{

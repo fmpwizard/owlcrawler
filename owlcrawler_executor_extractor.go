@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"github.com/fmpwizard/owlcrawler/cloudant"
 	"github.com/fmpwizard/owlcrawler/parse"
 
@@ -59,11 +60,11 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	}
 
 	exec.tasksLaunched++
-	go exec.extractText(driver, taskInfo)
+	fmt.Println("Total tasks launched ", exec.tasksLaunched)
+	exec.extractText(driver, taskInfo)
 }
 
 func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
-	fmt.Println("Total tasks launched ", exec.tasksLaunched)
 
 	//Read information about this URL we are about to process
 	payload := bytes.NewReader(taskInfo.GetData())
@@ -90,48 +91,31 @@ func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *m
 	//Fetch stored html and do extraction
 	fmt.Printf("/////////////queueMessage.URL %+v\n", queueMessage.URL)
 
-	//TODO refactor out
-	doc, err := cloudant.GetURLData(queueMessage.URL)
+	doc, err := getStoredHTMLForURL(queueMessage.URL)
 	if err != nil {
-		fmt.Printf("Error was: %+v\n", err)
-		fmt.Printf("Doc was: %+v\n", doc)
-		err = queue.DeleteMessage(queueMessage.ID)
-		if err != nil {
-			fmt.Printf("Error deleting message id: %s from queue, got: %v\n", queueMessage.ID, err)
+		queue.DeleteMessage(queueMessage.ID)
+	} else {
+		err = saveExtractedData(extractData(doc))
+		if err == cloudant.ERROR_NO_LATEST_VERSION {
+			doc, err = getStoredHTMLForURL(queueMessage.URL)
+			if err != nil {
+				fmt.Printf("Failed to get latest version of %s\n", queueMessage.URL)
+				queue.DeleteMessage(queueMessage.ID)
+				return
+			}
+			saveExtractedData(extractData(doc))
+		} else if err != nil {
+			_ = queue.DeleteMessage(queueMessage.ID)
+			runStatus := &mesos.TaskStatus{
+				TaskId: taskInfo.GetTaskId(),
+				State:  mesos.TaskState_TASK_FAILED.Enum(),
+			}
+			_, err := driver.SendStatusUpdate(runStatus)
+			if err != nil {
+				fmt.Printf("Failed to tell mesos that we died, sorry, got: %v", err)
+			}
 		}
-		fmt.Printf("Did not find data for url: %s\n", queueMessage.URL)
-		runStatus := &mesos.TaskStatus{
-			TaskId: taskInfo.GetTaskId(),
-			State:  mesos.TaskState_TASK_FAILED.Enum(),
-		}
-		_, err := driver.SendStatusUpdate(runStatus)
-		if err != nil {
-			fmt.Printf("Failed to tell mesos that we died, sorry, got: %v", err)
-		}
-		return
 	}
-	//End of refactor out
-
-	text := parse.ExtractText(doc.HTML)
-
-	links := parse.ExtractLinks(doc.HTML, doc.URL, fn)
-	doc.Text = text
-	doc.Links = links.URL
-
-	//TODO if rev does not match, retry
-	saveExtractedData()
-
-	urlToFetchQueue := mq.New("urls_to_fetch")
-
-	for _, u := range links.URL {
-		urlToFetchQueue.PushString(u)
-	}
-
-	err = queue.DeleteMessage(queueMessage.ID)
-	if err != nil {
-		fmt.Printf("Error deleting message id: %s from queue, got: %v\n", queueMessage.ID, err)
-	}
-
 	// finish task
 	fmt.Println("Finishing task", taskInfo.GetName())
 	finStatus := &mesos.TaskStatus{
@@ -144,44 +128,47 @@ func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *m
 	}
 	fmt.Println("Task finished", taskInfo.GetName())
 }
-
-func saveExtractedData() {
-	jsonDocWithText, err := json.Marshal(doc)
-	if err != nil {
-		fmt.Printf("Error generating json to save docWithText in database, got: %v\n", err)
+func extractData(doc cloudant.CouchDoc) cloudant.CouchDoc {
+	doc.Text = parse.ExtractText(doc.HTML)
+	fetch, storing := parse.ExtractLinks(doc.HTML, doc.URL, fn)
+	doc.LinksToQueue = fetch.URL
+	doc.Links = storing.URL
+	urlToFetchQueue := mq.New("urls_to_fetch")
+	for _, u := range fetch.URL {
+		urlToFetchQueue.PushString(u)
 	}
-	ret, err := cloudant.SaveExtractedText(doc.ID, jsonDocWithText)
+	return doc
+}
+
+func saveExtractedData(doc cloudant.CouchDoc) error {
+	jsonDocWithExtractedData, err := json.Marshal(doc)
 	if err != nil {
-		innerDoc, err := cloudant.GetURLData(queueMessage.URL)
-		if err != nil {
-			fmt.Printf("Error was: %+v\n", err)
-			fmt.Printf("Doc was: %+v\n", doc)
-			err = queue.DeleteMessage(queueMessage.ID)
-			if err != nil {
-				fmt.Printf("Error deleting message id: %s from queue, got: %v\n", queueMessage.ID, err)
-			}
-			fmt.Printf("Did not find data for url: %s\n", queueMessage.URL)
-			runStatus := &mesos.TaskStatus{
-				TaskId: taskInfo.GetTaskId(),
-				State:  mesos.TaskState_TASK_FAILED.Enum(),
-			}
-			_, err := driver.SendStatusUpdate(runStatus)
-			if err != nil {
-				fmt.Printf("Failed to tell mesos that we died, sorry, got: %v", err)
-			}
-			return
-		}
-		doc.Rev = innerDoc.Rev
-		jsonDocWithText, _ = json.Marshal(doc)
-		ret, err := cloudant.SaveExtractedText(doc.ID, jsonDocWithText)
-		if err != nil {
-			fmt.Printf("HUGE ERROR! %v\n", err)
-		}
-		fmt.Printf("second ret is %+v\n", ret)
-
+		return errors.New(fmt.Sprintf("Error generating json to save docWithText in database, got: %v\n", err))
 	}
-	fmt.Printf("ret is %+v\n", ret)
+	ret, err := cloudant.SaveExtractedTextAndLinks(doc.ID, jsonDocWithExtractedData)
+	if err == cloudant.ERROR_NO_LATEST_VERSION {
+		return cloudant.ERROR_NO_LATEST_VERSION
+	}
+	if err != nil {
+		fmt.Printf("Error was: %+v\n", err)
+		fmt.Printf("Doc was: %+v\n", doc)
+		return err
+	}
+	fmt.Printf("saveExtractedData gave: %+v\n", ret)
+	return nil
+}
 
+func getStoredHTMLForURL(url string) (cloudant.CouchDoc, error) {
+	doc, err := cloudant.GetURLData(url)
+	if err == cloudant.ERROR_404 {
+		return doc, cloudant.ERROR_404
+	}
+	if err != nil {
+		fmt.Printf("Error was: %+v\n", err)
+		fmt.Printf("Doc was: %+v\n", doc)
+		return doc, err
+	}
+	return doc, nil
 }
 
 func (exec *exampleExecutor) KillTask(exec.ExecutorDriver, *mesos.TaskID) {

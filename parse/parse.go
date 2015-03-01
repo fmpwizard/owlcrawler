@@ -56,18 +56,17 @@ func ExtractText(payload string) PageStructure {
 	return page
 }
 
-func ExtractLinks(payload string, originalURL string, shouldFetch URLFetchChecker) ExtractedLinks {
+func ExtractLinks(payload string, originalURL string, shouldFetch URLFetchChecker) (toFetch ExtractedLinks, toStore ExtractedLinks) {
 	link, err := url.Parse(originalURL)
 	if err != nil {
 		log.Fatalf("Error parsing url %s, got: %v\n", originalURL, err)
 	}
 
 	d := html.NewTokenizer(strings.NewReader(payload))
-	var extractedLinks ExtractedLinks
 	for {
 		tokenType := d.Next()
 		if tokenType == html.ErrorToken {
-			return extractedLinks
+			return toFetch, toStore
 		}
 		token := d.Token()
 		switch tokenType {
@@ -77,23 +76,26 @@ func ExtractLinks(payload string, originalURL string, shouldFetch URLFetchChecke
 					if attribute.Key == "href" {
 						if strings.HasPrefix(attribute.Val, "//") {
 							url := fmt.Sprintf("%s:%s", link.Scheme, attribute.Val)
+							toStore.URL = append(toStore.URL, url)
 							if shouldFetch(url) {
-								log.Printf("Sending url: %s:%s\n", url)
-								extractedLinks.URL = append(extractedLinks.URL, url)
+								log.Printf("Sending url: %s\n", url)
+								toFetch.URL = append(toFetch.URL, url)
 							}
 						} else if strings.HasPrefix(attribute.Val, "/") {
 							url := fmt.Sprintf("%s://%s%s", link.Scheme, link.Host, attribute.Val)
+							toStore.URL = append(toStore.URL, url)
 							if shouldFetch(url) {
 								log.Printf("Sending url: %s\n", url)
-								extractedLinks.URL = append(extractedLinks.URL, url)
+								toFetch.URL = append(toFetch.URL, url)
 							}
 						} else {
-							log.Printf("Ignoring url: %s\n", attribute.Val)
+							toStore.URL = append(toStore.URL, attribute.Val)
+							log.Printf("Simply storing url: %s\n", attribute.Val)
 						}
 					}
 				}
 			}
 		}
 	}
-	return extractedLinks
+	return toFetch, toStore
 }

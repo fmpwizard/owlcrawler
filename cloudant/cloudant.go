@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/fmpwizard/owlcrawler/parse"
 	"io/ioutil"
 	"log"
@@ -24,12 +23,13 @@ type cloudantCred struct {
 
 //CouchDoc represents a response fron CouchDB
 type CouchDoc struct {
-	ID    string              `json:"_id"`
-	Rev   string              `json:"_rev"`
-	URL   string              `json:"url"`
-	HTML  string              `json:"html"`
-	Text  parse.PageStructure `json:"text"`
-	Links []string            `json:"links"`
+	ID           string              `json:"_id"`
+	Rev          string              `json:"_rev"`
+	URL          string              `json:"url"`
+	HTML         string              `json:"html"`
+	Text         parse.PageStructure `json:"text"`
+	Links        []string            `json:"links"`
+	LinksToQueue []string            `json:"-"`
 }
 
 //CouchDocCreated represents a full document
@@ -38,6 +38,9 @@ type CouchDocCreated struct {
 	ID  string `json:"id"`
 	Rev string `json:"rev"`
 }
+
+var ERROR_NO_LATEST_VERSION = errors.New("Not latest revision.")
+var ERROR_404 = errors.New("Doc not found.")
 
 func init() {
 	if u, err := user.Current(); err == nil {
@@ -58,7 +61,7 @@ func init() {
 func AddURLData(url string, data []byte) (CouchDocCreated, error) {
 	client := &http.Client{}
 	document := bytes.NewReader(data)
-	req, err := http.NewRequest("POST", cloudantCredentials.URL, document)
+	req, err := http.NewRequest("PUT", cloudantCredentials.URL+"/"+base64.URLEncoding.EncodeToString([]byte(url)), document)
 	if err != nil {
 		log.Printf("Error parsing url, got: %v\n", err)
 	}
@@ -87,10 +90,10 @@ func AddURLData(url string, data []byte) (CouchDocCreated, error) {
 	return ret, nil
 }
 
-func SaveExtractedText(docID string, data []byte) (CouchDocCreated, error) {
+func SaveExtractedTextAndLinks(id string, data []byte) (CouchDocCreated, error) {
 	client := &http.Client{}
 	document := bytes.NewReader(data)
-	req, err := http.NewRequest("PUT", cloudantCredentials.URL+"/"+base64.URLEncoding.EncodeToString([]byte(docID)), document)
+	req, err := http.NewRequest("PUT", cloudantCredentials.URL+"/"+id, document)
 	if err != nil {
 		log.Printf("Error parsing url, got: %v\n", err)
 	}
@@ -108,7 +111,7 @@ func SaveExtractedText(docID string, data []byte) (CouchDocCreated, error) {
 		log.Printf("Error parsing result of saving document, got: %v\n", err)
 	}
 	if resp.StatusCode == 409 {
-		return CouchDocCreated{}, errors.New("Not latest revision.")
+		return CouchDocCreated{}, ERROR_NO_LATEST_VERSION
 	}
 	err = json.Unmarshal(body, &ret)
 	if err != nil {
@@ -146,23 +149,22 @@ func GetURLData(id string) (CouchDoc, error) {
 		log.Printf("\n\nError reading body response from GetURLData %v\n", err)
 		return CouchDoc{}, err
 	}
-	log.Printf("*********** %+v", string(body))
+	//log.Printf("*********** %+v\n", string(body))
 	err = json.Unmarshal(body, &result)
 	if err != nil {
 		log.Printf("\n\nError unmarshalling GetURLData body:\n%s\n into a struct, got: %v\n", string(body), err)
 	}
 	if resp.StatusCode == 404 {
-		return CouchDoc{}, errors.New(fmt.Sprintf("Doc id: %s not found.\n", id))
+		return CouchDoc{ID: id}, ERROR_404
 	}
 
 	return result, nil
 }
 
 //IsURLThere checks if the given url is already stored in the database
-func IsURLThere(storedURL string) bool {
+func IsURLThere(target string) bool {
 	client := &http.Client{}
-	//url := cloudantCredentials.URL + "/" + base64.URLEncoding.EncodeToString([]byte(storedURL))
-	url := cloudantCredentials.URL + "/" + storedURL
+	url := cloudantCredentials.URL + "/" + base64.URLEncoding.EncodeToString([]byte(target))
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		log.Printf("Error parsing url, got: %v\n", err)
@@ -175,7 +177,31 @@ func IsURLThere(storedURL string) bool {
 		log.Printf("Error sending request to Cloudant, got: %v\n", err)
 	}
 	resp.Body.Close()
+	log.Printf(">>>  checking \n%s \n(%s) and got \n%t\n\n", url, target, resp.StatusCode != 404)
 	return resp.StatusCode != 404
+}
+
+//IsItParsed checks if the given url is already parsed
+func IsItParsed(target string) bool {
+	client := &http.Client{}
+	url := cloudantCredentials.URL + "/" + target
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Printf("Error parsing url, got: %v\n", err)
+	}
+	req.SetBasicAuth(cloudantCredentials.User, cloudantCredentials.Password)
+	req.Header.Set("User-Agent", "OwlCrawler - https://github.com/fmpwizard/owlcrawler")
+	req.Header.Set("Accept", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error sending request to Cloudant, got: %v\n", err)
+	}
+	defer resp.Body.Close()
+	var doc CouchDoc
+	body, _ := ioutil.ReadAll(resp.Body)
+	json.Unmarshal(body, &doc)
+	log.Printf(">>>  checking \n%s and got \n%t\n\n", url, len(doc.Text.Text) > 0)
+	return len(doc.Text.Text) > 0
 }
 
 /*Design views:
