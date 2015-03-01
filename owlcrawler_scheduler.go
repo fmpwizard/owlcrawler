@@ -3,27 +3,27 @@
 package main
 
 import (
-	"bytes"
-	"encoding/gob"
-	"flag"
-	"fmt"
 	"github.com/fmpwizard/owlcrawler/cloudant"
+	"github.com/gogo/protobuf/proto"
+	log "github.com/golang/glog"
 	"github.com/iron-io/iron_go/mq"
 	"github.com/mesos/mesos-go/auth"
 	"github.com/mesos/mesos-go/auth/sasl"
 	"github.com/mesos/mesos-go/auth/sasl/mech"
+	mesos "github.com/mesos/mesos-go/mesosproto"
+	util "github.com/mesos/mesos-go/mesosutil"
+	sched "github.com/mesos/mesos-go/scheduler"
 	"golang.org/x/net/context"
+
+	"bytes"
+	"encoding/gob"
+	"flag"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
-
-	"github.com/gogo/protobuf/proto"
-	log "github.com/golang/glog"
-	mesos "github.com/mesos/mesos-go/mesosproto"
-	util "github.com/mesos/mesos-go/mesosutil"
-	sched "github.com/mesos/mesos-go/scheduler"
 )
 
 const (

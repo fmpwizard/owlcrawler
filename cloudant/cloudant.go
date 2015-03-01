@@ -1,13 +1,14 @@
 package cloudant
 
 import (
+	"github.com/fmpwizard/owlcrawler/parse"
+	log "github.com/golang/glog"
+
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"github.com/fmpwizard/owlcrawler/parse"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os/user"
 	"path/filepath"
@@ -63,7 +64,7 @@ func AddURLData(url string, data []byte) (CouchDocCreated, error) {
 	document := bytes.NewReader(data)
 	req, err := http.NewRequest("PUT", cloudantCredentials.URL+"/"+base64.URLEncoding.EncodeToString([]byte(url)), document)
 	if err != nil {
-		log.Printf("Error parsing url, got: %v\n", err)
+		log.Errorf("Error parsing url, got: %v\n", err)
 	}
 	req.SetBasicAuth(cloudantCredentials.User, cloudantCredentials.Password)
 	req.Header.Set("User-Agent", "OwlCrawler - https://github.com/fmpwizard/owlcrawler")
@@ -71,7 +72,7 @@ func AddURLData(url string, data []byte) (CouchDocCreated, error) {
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("Error sending request to Cloudant, got: %v\n", err)
+		log.Errorf("Error sending request to Cloudant, got: %v\n", err)
 	}
 	if resp.StatusCode == 409 {
 		return CouchDocCreated{}, errors.New("Already saved.")
@@ -79,14 +80,14 @@ func AddURLData(url string, data []byte) (CouchDocCreated, error) {
 	var ret CouchDocCreated
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("Error parsing result of saving document, got: %v\n", err)
+		log.Errorf("Error parsing result of saving document, got: %v\n", err)
 	}
 	err = json.Unmarshal(body, &ret)
 	if err != nil {
-		log.Printf("Error serializing from json to a CouchDocCreated, got: %v\n", err)
+		log.Errorf("Error serializing from json to a CouchDocCreated, got: %v\n", err)
 	}
 	resp.Body.Close()
-	log.Printf("AddURLData respose was %+v\n", resp)
+	log.V(3).Infof("AddURLData respose was %+v\n", resp)
 	return ret, nil
 }
 
@@ -95,7 +96,7 @@ func SaveExtractedTextAndLinks(id string, data []byte) (CouchDocCreated, error) 
 	document := bytes.NewReader(data)
 	req, err := http.NewRequest("PUT", cloudantCredentials.URL+"/"+id, document)
 	if err != nil {
-		log.Printf("Error parsing url, got: %v\n", err)
+		log.Errorf("Error parsing url, got: %v\n", err)
 	}
 	req.SetBasicAuth(cloudantCredentials.User, cloudantCredentials.Password)
 	req.Header.Set("User-Agent", "OwlCrawler - https://github.com/fmpwizard/owlcrawler")
@@ -103,23 +104,23 @@ func SaveExtractedTextAndLinks(id string, data []byte) (CouchDocCreated, error) 
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("Error sending request to Cloudant, got: %v\n", err)
+		log.Errorf("Error sending request to Cloudant, got: %v\n", err)
 	}
 	var ret CouchDocCreated
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("Error parsing result of saving document, got: %v\n", err)
+		log.Errorf("Error parsing result of saving document, got: %v\n", err)
 	}
 	if resp.StatusCode == 409 {
 		return CouchDocCreated{}, ERROR_NO_LATEST_VERSION
 	}
 	err = json.Unmarshal(body, &ret)
 	if err != nil {
-		log.Printf("Error serializing from json to a CouchDocCreated, got: %v\n", err)
+		log.Errorf("Error serializing from json to a CouchDocCreated, got: %v\n", err)
 	}
 	defer resp.Body.Close()
-	log.Printf("SaveExtractedText respose was %+v\n", resp)
-	log.Printf("Body: %+v\n", string(body))
+	log.V(3).Infof("SaveExtractedText respose was %+v\n", resp)
+	log.V(3).Infof("Body: %+v\n", string(body))
 	return ret, nil
 }
 
@@ -127,10 +128,9 @@ func SaveExtractedTextAndLinks(id string, data []byte) (CouchDocCreated, error) 
 func GetURLData(id string) (CouchDoc, error) {
 	client := &http.Client{}
 	docURL := cloudantCredentials.URL + "/" + id
-	log.Println("============ ", docURL)
 	req, err := http.NewRequest("GET", docURL, nil)
 	if err != nil {
-		log.Printf("Error parsing url, got: %v\n", err)
+		log.Errorf("Error parsing url, got: %v\n", err)
 		return CouchDoc{}, err
 	}
 	req.SetBasicAuth(cloudantCredentials.User, cloudantCredentials.Password)
@@ -138,7 +138,7 @@ func GetURLData(id string) (CouchDoc, error) {
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("\n\nError sending request to Cloudant, got: %v\n", err)
+		log.Errorf("Error sending request to Cloudant, got: %v\n", err)
 		return CouchDoc{}, err
 	}
 	defer resp.Body.Close()
@@ -146,13 +146,13 @@ func GetURLData(id string) (CouchDoc, error) {
 	var result CouchDoc
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("\n\nError reading body response from GetURLData %v\n", err)
+		log.Errorf("Error reading body response from GetURLData %v\n", err)
 		return CouchDoc{}, err
 	}
-	//log.Printf("*********** %+v\n", string(body))
+	//log.V(3).Infof("*********** %+v\n", string(body))
 	err = json.Unmarshal(body, &result)
 	if err != nil {
-		log.Printf("\n\nError unmarshalling GetURLData body:\n%s\n into a struct, got: %v\n", string(body), err)
+		log.Errorf("Error unmarshalling GetURLData body:\n%s\n into a struct, got: %v\n", string(body), err)
 	}
 	if resp.StatusCode == 404 {
 		return CouchDoc{ID: id}, ERROR_404
@@ -167,17 +167,17 @@ func IsURLThere(target string) bool {
 	url := cloudantCredentials.URL + "/" + base64.URLEncoding.EncodeToString([]byte(target))
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		log.Printf("Error parsing url, got: %v\n", err)
+		log.Errorf("Error parsing url, got: %v\n", err)
 	}
 	req.SetBasicAuth(cloudantCredentials.User, cloudantCredentials.Password)
 	req.Header.Set("User-Agent", "OwlCrawler - https://github.com/fmpwizard/owlcrawler")
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("Error sending request to Cloudant, got: %v\n", err)
+		log.Errorf("Error sending request to Cloudant, got: %v\n", err)
 	}
 	resp.Body.Close()
-	log.Printf(">>>  checking \n%s \n(%s) and got \n%t\n\n", url, target, resp.StatusCode != 404)
+	log.V(4).Infof(">>>  checking \n%s \n(%s) and got \n%t\n\n", url, target, resp.StatusCode != 404)
 	return resp.StatusCode != 404
 }
 
@@ -187,20 +187,20 @@ func IsItParsed(target string) bool {
 	url := cloudantCredentials.URL + "/" + target
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		log.Printf("Error parsing url, got: %v\n", err)
+		log.Errorf("Error parsing url, got: %v\n", err)
 	}
 	req.SetBasicAuth(cloudantCredentials.User, cloudantCredentials.Password)
 	req.Header.Set("User-Agent", "OwlCrawler - https://github.com/fmpwizard/owlcrawler")
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("Error sending request to Cloudant, got: %v\n", err)
+		log.Errorf("Error sending request to Cloudant, got: %v\n", err)
 	}
 	defer resp.Body.Close()
 	var doc CouchDoc
 	body, _ := ioutil.ReadAll(resp.Body)
 	json.Unmarshal(body, &doc)
-	log.Printf(">>>  checking \n%s and got \n%t\n\n", url, len(doc.Text.Text) > 0)
+	log.V(4).Infof(">>>  checking \n%s and got \n%t\n\n", url, len(doc.Text.Text) > 0)
 	return len(doc.Text.Text) > 0
 }
 

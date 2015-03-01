@@ -1,10 +1,11 @@
 package parse
 
 import (
-	"fmt"
+	log "github.com/golang/glog"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
-	"log"
+
+	"fmt"
 	"net/url"
 	"strings"
 )
@@ -30,10 +31,11 @@ func ExtractText(payload string) PageStructure {
 
 	d := html.NewTokenizer(strings.NewReader(payload))
 	var tok atom.Atom
+Loop:
 	for {
 		tokenType := d.Next()
 		if tokenType == html.ErrorToken {
-			return page
+			break Loop
 		}
 		token := d.Token()
 		switch tokenType {
@@ -75,14 +77,15 @@ func ExtractText(payload string) PageStructure {
 func ExtractLinks(payload string, originalURL string, shouldFetch URLFetchChecker) (toFetch ExtractedLinks, toStore ExtractedLinks) {
 	link, err := url.Parse(originalURL)
 	if err != nil {
-		log.Fatalf("Error parsing url %s, got: %v\n", originalURL, err)
+		log.Errorf("Error parsing url %s, got: %v\n", originalURL, err)
 	}
 
 	d := html.NewTokenizer(strings.NewReader(payload))
+Loop:
 	for {
 		tokenType := d.Next()
 		if tokenType == html.ErrorToken {
-			return toFetch, toStore
+			break Loop
 		}
 		token := d.Token()
 		switch tokenType {
@@ -94,19 +97,19 @@ func ExtractLinks(payload string, originalURL string, shouldFetch URLFetchChecke
 							url := fmt.Sprintf("%s:%s", link.Scheme, attribute.Val)
 							toStore.URL = append(toStore.URL, url)
 							if shouldFetch(url) {
-								log.Printf("Sending url: %s\n", url)
+								log.V(3).Infof("Sending url: %s\n", url)
 								toFetch.URL = append(toFetch.URL, url)
 							}
 						} else if strings.HasPrefix(attribute.Val, "/") {
 							url := fmt.Sprintf("%s://%s%s", link.Scheme, link.Host, attribute.Val)
 							toStore.URL = append(toStore.URL, url)
 							if shouldFetch(url) {
-								log.Printf("Sending url: %s\n", url)
+								log.V(3).Infof("Sending url: %s\n", url)
 								toFetch.URL = append(toFetch.URL, url)
 							}
 						} else {
 							toStore.URL = append(toStore.URL, attribute.Val)
-							log.Printf("Simply storing url: %s\n", attribute.Val)
+							log.V(3).Infof("Simply storing url: %s\n", attribute.Val)
 						}
 					}
 				}

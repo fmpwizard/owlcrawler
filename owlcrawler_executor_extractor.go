@@ -3,18 +3,19 @@
 package main
 
 import (
-	"errors"
 	"github.com/fmpwizard/owlcrawler/cloudant"
 	"github.com/fmpwizard/owlcrawler/parse"
+	log "github.com/golang/glog"
+	"github.com/iron-io/iron_go/mq"
+	exec "github.com/mesos/mesos-go/executor"
+	mesos "github.com/mesos/mesos-go/mesosproto"
 
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
-	"github.com/iron-io/iron_go/mq"
-	exec "github.com/mesos/mesos-go/executor"
-	mesos "github.com/mesos/mesos-go/mesosproto"
 )
 
 type exampleExecutor struct {
@@ -37,30 +38,30 @@ func newExampleExecutor() *exampleExecutor {
 }
 
 func (exec *exampleExecutor) Registered(driver exec.ExecutorDriver, execInfo *mesos.ExecutorInfo, fwinfo *mesos.FrameworkInfo, slaveInfo *mesos.SlaveInfo) {
-	fmt.Println("Registered Executor on slave ", slaveInfo.GetHostname())
+	log.V(3).Infof("Registered Executor on slave ", slaveInfo.GetHostname())
 }
 
 func (exec *exampleExecutor) Reregistered(driver exec.ExecutorDriver, slaveInfo *mesos.SlaveInfo) {
-	fmt.Println("Re-registered Executor on slave ", slaveInfo.GetHostname())
+	log.V(3).Infof("Re-registered Executor on slave ", slaveInfo.GetHostname())
 }
 
 func (exec *exampleExecutor) Disconnected(exec.ExecutorDriver) {
-	fmt.Println("Executor disconnected.")
+	log.V(3).Infof("Executor disconnected.")
 }
 
 func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
-	fmt.Println("Launching task", taskInfo.GetName())
+	log.V(2).Infof("Launching task", taskInfo.GetName())
 	runStatus := &mesos.TaskStatus{
 		TaskId: taskInfo.GetTaskId(),
 		State:  mesos.TaskState_TASK_RUNNING.Enum(),
 	}
 	_, err := driver.SendStatusUpdate(runStatus)
 	if err != nil {
-		fmt.Println("Got error", err)
+		log.Errorln("Got error %s\n", err)
 	}
 
 	exec.tasksLaunched++
-	fmt.Println("Total tasks launched ", exec.tasksLaunched)
+	log.V(2).Infof("Total tasks launched ", exec.tasksLaunched)
 	exec.extractText(driver, taskInfo)
 }
 
@@ -72,7 +73,7 @@ func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *m
 	dec := gob.NewDecoder(payload)
 	err := dec.Decode(&queueMessage)
 	if err != nil {
-		fmt.Println("decode error:", err)
+		log.Errorln("decode error:", err)
 	}
 	queue := mq.New(queueMessage.QueueName)
 	if queueMessage.URL == "" {
@@ -117,16 +118,15 @@ func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *m
 		}
 	}
 	// finish task
-	fmt.Println("Finishing task", taskInfo.GetName())
 	finStatus := &mesos.TaskStatus{
 		TaskId: taskInfo.GetTaskId(),
 		State:  mesos.TaskState_TASK_FINISHED.Enum(),
 	}
 	_, err = driver.SendStatusUpdate(finStatus)
 	if err != nil {
-		fmt.Println("Got error", err)
+		log.Errorln("Got error", err)
 	}
-	fmt.Println("Task finished", taskInfo.GetName())
+	log.V(2).Infof("Task finished", taskInfo.GetName())
 }
 func extractData(doc cloudant.CouchDoc) cloudant.CouchDoc {
 	doc.Text = parse.ExtractText(doc.HTML)
@@ -172,19 +172,19 @@ func getStoredHTMLForURL(url string) (cloudant.CouchDoc, error) {
 }
 
 func (exec *exampleExecutor) KillTask(exec.ExecutorDriver, *mesos.TaskID) {
-	fmt.Println("Kill task")
+	log.V(3).Infof("Kill task")
 }
 
 func (exec *exampleExecutor) FrameworkMessage(driver exec.ExecutorDriver, msg string) {
-	fmt.Println("Got framework message: ", msg)
+	log.V(3).Infof("Got framework message: ", msg)
 }
 
 func (exec *exampleExecutor) Shutdown(exec.ExecutorDriver) {
-	fmt.Println("Shutting down the executor ")
+	log.V(3).Infof("Shutting down the executor ")
 }
 
 func (exec *exampleExecutor) Error(driver exec.ExecutorDriver, err string) {
-	fmt.Println("Got error message:", err)
+	log.V(3).Infof("Got error message:", err)
 }
 
 // -------------------------- func inits () ----------------- //
@@ -193,7 +193,7 @@ func init() {
 }
 
 func main() {
-	fmt.Println("Starting Extractor Executor")
+	log.V(2).Infof("Starting Extractor Executor")
 
 	dconfig := exec.DriverConfig{
 		Executor: newExampleExecutor(),
@@ -201,14 +201,13 @@ func main() {
 	driver, err := exec.NewMesosExecutorDriver(dconfig)
 
 	if err != nil {
-		fmt.Println("Unable to create a ExecutorDriver ", err.Error())
+		log.Errorln("Unable to create a ExecutorDriver ", err.Error())
 	}
 
 	_, err = driver.Start()
 	if err != nil {
-		fmt.Println("Got error:", err)
+		log.Errorln("Got error:", err)
 		return
 	}
-	fmt.Println("Executor process has started and running.")
 	driver.Join()
 }

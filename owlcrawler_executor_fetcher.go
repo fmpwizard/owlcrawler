@@ -6,14 +6,15 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"github.com/fmpwizard/owlcrawler/cloudant"
+	log "github.com/golang/glog"
+	"github.com/iron-io/iron_go/mq"
+	exec "github.com/mesos/mesos-go/executor"
+	mesos "github.com/mesos/mesos-go/mesosproto"
 
 	"bytes"
 	"encoding/gob"
 	"flag"
 	"fmt"
-	"github.com/iron-io/iron_go/mq"
-	exec "github.com/mesos/mesos-go/executor"
-	mesos "github.com/mesos/mesos-go/mesosproto"
 	"io/ioutil"
 	"net/http"
 	"time"
@@ -42,26 +43,26 @@ func newExampleExecutor() *exampleExecutor {
 }
 
 func (exec *exampleExecutor) Registered(driver exec.ExecutorDriver, execInfo *mesos.ExecutorInfo, fwinfo *mesos.FrameworkInfo, slaveInfo *mesos.SlaveInfo) {
-	fmt.Println("Registered Executor on slave ", slaveInfo.GetHostname())
+	log.V(3).Infof("Registered Executor on slave ", slaveInfo.GetHostname())
 }
 
 func (exec *exampleExecutor) Reregistered(driver exec.ExecutorDriver, slaveInfo *mesos.SlaveInfo) {
-	fmt.Println("Re-registered Executor on slave ", slaveInfo.GetHostname())
+	log.V(3).Infof("Re-registered Executor on slave ", slaveInfo.GetHostname())
 }
 
 func (exec *exampleExecutor) Disconnected(exec.ExecutorDriver) {
-	fmt.Println("Executor disconnected.")
+	log.V(3).Infof("Executor disconnected.")
 }
 
 func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
-	fmt.Println("Launching task", taskInfo.GetName())
+	log.V(2).Infof("Launching task", taskInfo.GetName())
 	runStatus := &mesos.TaskStatus{
 		TaskId: taskInfo.GetTaskId(),
 		State:  mesos.TaskState_TASK_RUNNING.Enum(),
 	}
 	_, err := driver.SendStatusUpdate(runStatus)
 	if err != nil {
-		fmt.Println("Got error", err)
+		log.Errorln("Got error", err)
 	}
 
 	exec.tasksLaunched++
@@ -69,7 +70,7 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 }
 
 func (exec *exampleExecutor) fetchHTML(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
-	fmt.Println("Total tasks launched ", exec.tasksLaunched)
+	log.V(2).Infof("Total tasks launched ", exec.tasksLaunched)
 
 	//Read information about this URL we are about to process
 	payload := bytes.NewReader(taskInfo.GetData())
@@ -77,7 +78,7 @@ func (exec *exampleExecutor) fetchHTML(driver exec.ExecutorDriver, taskInfo *mes
 	dec := gob.NewDecoder(payload)
 	err := dec.Decode(&queueMessage)
 	if err != nil {
-		fmt.Println("decode error:", err)
+		log.Errorln("decode error:", err)
 	}
 	queue := mq.New(queueMessage.QueueName)
 
@@ -85,15 +86,15 @@ func (exec *exampleExecutor) fetchHTML(driver exec.ExecutorDriver, taskInfo *mes
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", queueMessage.URL, nil)
 	if err != nil {
-		fmt.Printf("Error parsing url: %s, got: %v\n", queueMessage.URL, err)
+		log.Errorf("Error parsing url: %s, got: %v\n", queueMessage.URL, err)
 	}
 	req.Header.Set("User-Agent", "OwlCrawler - https://github.com/fmpwizard/owlcrawler")
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Printf("Error while fetching url: %s, got error: %v\n", queueMessage.URL, err)
+		log.Errorf("Error while fetching url: %s, got error: %v\n", queueMessage.URL, err)
 		err = queue.ReleaseMessage(queueMessage.ID, 0)
 		if err != nil {
-			fmt.Printf("Error releasing message id: %s from queue, got: %v\n", queueMessage.ID, err)
+			log.Errorf("Error releasing message id: %s from queue, got: %v\n", queueMessage.ID, err)
 		}
 		updateStatusDied(driver, taskInfo)
 		return
@@ -102,10 +103,10 @@ func (exec *exampleExecutor) fetchHTML(driver exec.ExecutorDriver, taskInfo *mes
 	defer resp.Body.Close()
 	htmlData, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("Error while reading html for url: %s, got error: %v\n", queueMessage.URL, err)
+		log.Errorf("Error while reading html for url: %s, got error: %v\n", queueMessage.URL, err)
 		err = queue.ReleaseMessage(queueMessage.ID, 0)
 		if err != nil {
-			fmt.Printf("Error releasing message id: %s from queue, got: %v\n", queueMessage.ID, err)
+			log.Errorf("Error releasing message id: %s from queue, got: %v\n", queueMessage.ID, err)
 		}
 		updateStatusDied(driver, taskInfo)
 		return
@@ -113,7 +114,7 @@ func (exec *exampleExecutor) fetchHTML(driver exec.ExecutorDriver, taskInfo *mes
 
 	err = queue.DeleteMessage(queueMessage.ID)
 	if err != nil {
-		fmt.Printf("Error deleting message id: %s from queue, got: %v\n", queueMessage.ID, err)
+		log.Errorf("Error deleting message id: %s from queue, got: %v\n", queueMessage.ID, err)
 	}
 	data := &dataStore{
 		ID:   base64.URLEncoding.EncodeToString([]byte(queueMessage.URL)),
@@ -124,7 +125,7 @@ func (exec *exampleExecutor) fetchHTML(driver exec.ExecutorDriver, taskInfo *mes
 
 	pageData, err := json.Marshal(data)
 	if err != nil {
-		fmt.Printf("Error generating json to save in database, got: %v\n", err)
+		log.Errorf("Error generating json to save in database, got: %v\n", err)
 	}
 
 	ret, err := cloudant.AddURLData(queueMessage.URL, pageData)
@@ -135,32 +136,31 @@ func (exec *exampleExecutor) fetchHTML(driver exec.ExecutorDriver, taskInfo *mes
 	}
 
 	// finish task
-	fmt.Println("Finishing task", taskInfo.GetName())
 	finStatus := &mesos.TaskStatus{
 		TaskId: taskInfo.GetTaskId(),
 		State:  mesos.TaskState_TASK_FINISHED.Enum(),
 	}
 	_, err = driver.SendStatusUpdate(finStatus)
 	if err != nil {
-		fmt.Println("Got error", err)
+		log.Errorln("Got error", err)
 	}
-	fmt.Println("Task finished", taskInfo.GetName())
+	log.V(2).Infof("Task finished", taskInfo.GetName())
 }
 
 func (exec *exampleExecutor) KillTask(exec.ExecutorDriver, *mesos.TaskID) {
-	fmt.Println("Kill task")
+	log.V(3).Infof("Kill task")
 }
 
 func (exec *exampleExecutor) FrameworkMessage(driver exec.ExecutorDriver, msg string) {
-	fmt.Println("Got framework message: ", msg)
+	log.V(3).Infof("Got framework message: ", msg)
 }
 
 func (exec *exampleExecutor) Shutdown(exec.ExecutorDriver) {
-	fmt.Println("Shutting down the executor")
+	log.V(3).Infof("Shutting down the executor")
 }
 
 func (exec *exampleExecutor) Error(driver exec.ExecutorDriver, err string) {
-	fmt.Println("Got error message:", err)
+	log.Errorln("Got error message:", err)
 }
 
 // -------------------------- func inits () ----------------- //
@@ -169,7 +169,7 @@ func init() {
 }
 
 func main() {
-	fmt.Println("Starting Fetcher Executor")
+	log.V(2).Infof("Starting Fetcher Executor")
 
 	dconfig := exec.DriverConfig{
 		Executor: newExampleExecutor(),
@@ -185,7 +185,6 @@ func main() {
 		fmt.Println("Got error:", err)
 		return
 	}
-	fmt.Println("Executor process has started and running.")
 	driver.Join()
 }
 
@@ -196,7 +195,7 @@ func updateStatusDied(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
 	}
 	_, err := driver.SendStatusUpdate(runStatus)
 	if err != nil {
-		fmt.Printf("Failed to tell mesos that we died, sorry, got: %v", err)
+		log.Errorf("Failed to tell mesos that we died, sorry, got: %v", err)
 	}
 
 }
