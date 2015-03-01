@@ -62,7 +62,7 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 
 	exec.tasksLaunched++
 	log.V(2).Infof("Total tasks launched %s\n", exec.tasksLaunched)
-	exec.extractText(driver, taskInfo)
+	go exec.extractText(driver, taskInfo)
 }
 
 func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {

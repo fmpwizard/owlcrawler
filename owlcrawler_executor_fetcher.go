@@ -66,7 +66,7 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	}
 
 	exec.tasksLaunched++
-	exec.fetchHTML(driver, taskInfo)
+	go exec.fetchHTML(driver, taskInfo)
 }
 
 func (exec *exampleExecutor) fetchHTML(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
