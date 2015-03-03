@@ -316,7 +316,7 @@ func prepareExecutorInfo() []*mesos.ExecutorInfo {
 
 	extractorExe := &mesos.ExecutorInfo{
 		ExecutorId: util.NewExecutorID("owl-cralwer-extractor"),
-		Name:       proto.String("OwlCralwer Fetcher"),
+		Name:       proto.String("OwlCralwer Extractor"),
 		Source:     proto.String("owl-cralwer"),
 		Command: &mesos.CommandInfo{
 			Value: proto.String(extractorExecutorCommand),
