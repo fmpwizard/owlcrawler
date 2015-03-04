@@ -43,6 +43,9 @@ type CouchDocCreated struct {
 var ERROR_NO_LATEST_VERSION = errors.New("Not latest revision.")
 var ERROR_404 = errors.New("Doc not found.")
 
+type Cloudant struct {
+}
+
 func init() {
 	if u, err := user.Current(); err == nil {
 		path := filepath.Join(u.HomeDir, ".cloudant.json")
@@ -183,6 +186,29 @@ func IsURLThere(target string) bool {
 
 //IsItParsed checks if the given url is already parsed
 func IsItParsed(target string) bool {
+	client := &http.Client{}
+	url := cloudantCredentials.URL + "/" + target
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Errorf("Error parsing url, got: %v\n", err)
+	}
+	req.SetBasicAuth(cloudantCredentials.User, cloudantCredentials.Password)
+	req.Header.Set("User-Agent", "OwlCrawler - https://github.com/fmpwizard/owlcrawler")
+	req.Header.Set("Accept", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Errorf("Error sending request to Cloudant, got: %v\n", err)
+	}
+	defer resp.Body.Close()
+	var doc CouchDoc
+	body, _ := ioutil.ReadAll(resp.Body)
+	json.Unmarshal(body, &doc)
+	log.V(4).Infof(">>>  checking \n%s and got \n%t\n\n", url, len(doc.Text.Text) > 0)
+	return len(doc.Text.Text) > 0
+}
+
+//IsItParsed checks if the given url is already parsed
+func (store *Cloudant) IsItParsed(target string) bool {
 	client := &http.Client{}
 	url := cloudantCredentials.URL + "/" + target
 	req, err := http.NewRequest("GET", url, nil)

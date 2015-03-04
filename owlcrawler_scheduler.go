@@ -4,6 +4,7 @@ package main
 
 import (
 	"github.com/fmpwizard/owlcrawler/cloudant"
+	"github.com/fmpwizard/owlcrawler/store"
 	"github.com/gogo/protobuf/proto"
 	log "github.com/golang/glog"
 	"github.com/iron-io/iron_go/mq"
@@ -54,6 +55,14 @@ func newExampleScheduler(exec *mesos.ExecutorInfo) *ExampleScheduler {
 		tasksLaunched: 0,
 		tasksFinished: 0,
 	}
+}
+
+type CloudantStore struct {
+	Cloudant *cloudant.Cloudant
+}
+
+func newCloudantStore() *CloudantStore {
+	return &CloudantStore{}
 }
 
 // Registered implements the Registered handler.
@@ -131,7 +140,9 @@ func extractTask(queue *mq.Queue, sched *ExampleScheduler, workerID *mesos.Slave
 	if err != nil {
 		return false, &mesos.TaskInfo{}
 	}
-	if cloudant.IsItParsed(msg.Body) {
+	x := newCloudantStore().Cloudant
+
+	if x.IsItParsed(msg.Body) {
 		log.Infof("Not going to re parse %s\n", msg.Body)
 		msg.Delete()
 		return false, &mesos.TaskInfo{}
@@ -341,13 +352,10 @@ func parseIP(address string) net.IP {
 // ----------------------- func main() ------------------------- //
 
 func main() {
-
 	// build command executor
 	exec := prepareExecutorInfo()
-
 	go startSchedulerDriver(exec[0])
 	startSchedulerDriver(exec[1])
-
 }
 
 func startSchedulerDriver(exec *mesos.ExecutorInfo) {
