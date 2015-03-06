@@ -133,85 +133,93 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 }
 
 func extractTask(queue *mq.Queue, sched *ExampleScheduler, workerID *mesos.SlaveID) (bool, *mesos.TaskInfo) {
-	msg, err := queue.Get()
+	msgs, err := queue.GetNWithTimeoutAndWait(1, 120, 40)
 	if err != nil {
 		return false, &mesos.TaskInfo{}
 	}
 
-	if couchdb.IsItParsed(msg.Body) {
-		log.Infof("Not going to re parse %s\n", msg.Body)
-		msg.Delete()
-		return false, &mesos.TaskInfo{}
-	}
-	sched.tasksLaunched++
+	for _, msg := range msgs {
 
-	taskID := &mesos.TaskID{
-		Value: proto.String(strconv.Itoa(sched.tasksLaunched)),
-	}
-	var msgAndID bytes.Buffer
-	enc := gob.NewEncoder(&msgAndID)
-	err = enc.Encode(OwlCrawlMsg{
-		URL:       msg.Body,
-		ID:        msg.Id,
-		QueueName: queue.Name,
-	})
-	if err != nil {
-		log.Fatal("encode error:", err)
-	}
+		if couchdb.IsItParsed(msg.Body) {
+			log.Infof("Not going to re parse %s\n", msg.Body)
+			msg.Delete()
+			return false, &mesos.TaskInfo{}
+		}
+		sched.tasksLaunched++
 
-	task := &mesos.TaskInfo{
-		Name:     proto.String("own-crawler-extract-" + taskID.GetValue()),
-		TaskId:   taskID,
-		SlaveId:  workerID,
-		Executor: sched.executor,
-		Resources: []*mesos.Resource{
-			util.NewScalarResource("cpus", cpuPerTask),
-			util.NewScalarResource("mem", memPerTask),
-		},
-		Data: msgAndID.Bytes(),
+		taskID := &mesos.TaskID{
+			Value: proto.String(strconv.Itoa(sched.tasksLaunched)),
+		}
+		var msgAndID bytes.Buffer
+		enc := gob.NewEncoder(&msgAndID)
+		err = enc.Encode(OwlCrawlMsg{
+			URL:       msg.Body,
+			ID:        msg.Id,
+			QueueName: queue.Name,
+		})
+		if err != nil {
+			log.Fatal("encode error:", err)
+		}
+
+		task := &mesos.TaskInfo{
+			Name:     proto.String("own-crawler-extract-" + taskID.GetValue() + "-" + msg.Body),
+			TaskId:   taskID,
+			SlaveId:  workerID,
+			Executor: sched.executor,
+			Resources: []*mesos.Resource{
+				util.NewScalarResource("cpus", cpuPerTask),
+				util.NewScalarResource("mem", memPerTask),
+			},
+			Data: msgAndID.Bytes(),
+		}
+		return true, task
 	}
-	return true, task
+	return false, &mesos.TaskInfo{}
 }
 
 func fetchTask(queue *mq.Queue, sched *ExampleScheduler, workerID *mesos.SlaveID) (bool, *mesos.TaskInfo) {
-	msg, err := queue.Get()
+	msgs, err := queue.GetNWithTimeoutAndWait(1, 120, 40)
 	if err != nil {
 		return false, &mesos.TaskInfo{}
-	} else {
+	}
+
+	for _, msg := range msgs {
+
 		if couchdb.IsURLThere(msg.Body) { //found an entry, no need to fetch it again
 			msg.Delete()
 			return false, &mesos.TaskInfo{}
 		}
-	}
 
-	sched.tasksLaunched++
+		sched.tasksLaunched++
 
-	taskID := &mesos.TaskID{
-		Value: proto.String(strconv.Itoa(sched.tasksLaunched)),
-	}
-	var msgAndID bytes.Buffer
-	enc := gob.NewEncoder(&msgAndID)
-	err = enc.Encode(OwlCrawlMsg{
-		URL:       msg.Body,
-		ID:        msg.Id,
-		QueueName: queue.Name,
-	})
-	if err != nil {
-		log.Fatal("encode error:", err)
-	}
+		taskID := &mesos.TaskID{
+			Value: proto.String(strconv.Itoa(sched.tasksLaunched)),
+		}
+		var msgAndID bytes.Buffer
+		enc := gob.NewEncoder(&msgAndID)
+		err = enc.Encode(OwlCrawlMsg{
+			URL:       msg.Body,
+			ID:        msg.Id,
+			QueueName: queue.Name,
+		})
+		if err != nil {
+			log.Fatal("encode error:", err)
+		}
 
-	task := &mesos.TaskInfo{
-		Name:     proto.String("own-crawler-fetch-" + taskID.GetValue()),
-		TaskId:   taskID,
-		SlaveId:  workerID,
-		Executor: sched.executor,
-		Resources: []*mesos.Resource{
-			util.NewScalarResource("cpus", cpuPerTask),
-			util.NewScalarResource("mem", memPerTask),
-		},
-		Data: msgAndID.Bytes(),
+		task := &mesos.TaskInfo{
+			Name:     proto.String("own-crawler-fetch-" + taskID.GetValue() + "-" + msg.Body),
+			TaskId:   taskID,
+			SlaveId:  workerID,
+			Executor: sched.executor,
+			Resources: []*mesos.Resource{
+				util.NewScalarResource("cpus", cpuPerTask),
+				util.NewScalarResource("mem", memPerTask),
+			},
+			Data: msgAndID.Bytes(),
+		}
+		return true, task
 	}
-	return true, task
+	return false, &mesos.TaskInfo{}
 }
 
 //StatusUpdate is called to get the latest status of the task
