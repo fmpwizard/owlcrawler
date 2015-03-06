@@ -2,6 +2,11 @@
 
 It's a distributed web crawler that uses mesos for scheduling workers, written in Go.
 
+## Dependencies
+
+* CouchDB 1.x (tested on 1.6.1)
+* IronMQ account
+
 ## Building.
 
 Build the scheduler
@@ -14,6 +19,24 @@ Build the two executors
 go build -tags=fetcherExec -o owlcrawler-executor-fetcher owlcrawler_executor_fetcher.go && \
 go build -tags=extractorExec -o owlcrawler-executor-extractor owlcrawler_executor_extractor.go 
 ```
+
+### Setup
+
+1. Setup couchdb with at least one admin user, you can follow the instructions [here](http://stackoverflow.com/a/6418670/309896)
+2. create a file `.couchdb.json` and place it in your `$HOME` directory
+
+
+Sample `.couchdb.json`
+
+```
+{
+	"user": "user-here",
+	"password": "super-secret-password",
+	"url": "http://localhost:5984/owl-crawler"
+}
+
+```
+
 
 ## Run
 
