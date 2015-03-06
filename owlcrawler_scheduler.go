@@ -3,7 +3,7 @@
 package main
 
 import (
-	"github.com/fmpwizard/owlcrawler/cloudant"
+	"github.com/fmpwizard/owlcrawler/couchdb"
 	"github.com/gogo/protobuf/proto"
 	log "github.com/golang/glog"
 	"github.com/iron-io/iron_go/mq"
@@ -100,6 +100,7 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 		remainingMems := mems
 
 		var tasks []*mesos.TaskInfo
+	ResourceLoop:
 		for cpuPerTask <= remainingCpus &&
 			memPerTask <= remainingMems {
 
@@ -108,12 +109,17 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 					tasks = append(tasks, task)
 					remainingCpus -= cpuPerTask
 					remainingMems -= memPerTask
+				} else {
+					break ResourceLoop
 				}
+
 			} else if sched.executor.GetExecutorId().GetValue() == "owl-cralwer-extractor" {
 				if ok, task := extractTask(HTMLToParseQueue, sched, offer.SlaveId); ok {
 					tasks = append(tasks, task)
 					remainingCpus -= cpuPerTask
 					remainingMems -= memPerTask
+				} else {
+					break ResourceLoop
 				}
 			}
 
@@ -131,7 +137,8 @@ func extractTask(queue *mq.Queue, sched *ExampleScheduler, workerID *mesos.Slave
 	if err != nil {
 		return false, &mesos.TaskInfo{}
 	}
-	if cloudant.IsItParsed(msg.Body) {
+
+	if couchdb.IsItParsed(msg.Body) {
 		log.Infof("Not going to re parse %s\n", msg.Body)
 		msg.Delete()
 		return false, &mesos.TaskInfo{}
@@ -171,7 +178,7 @@ func fetchTask(queue *mq.Queue, sched *ExampleScheduler, workerID *mesos.SlaveID
 	if err != nil {
 		return false, &mesos.TaskInfo{}
 	} else {
-		if cloudant.IsURLThere(msg.Body) { //found an entry, no need to fetch it again
+		if couchdb.IsURLThere(msg.Body) { //found an entry, no need to fetch it again
 			msg.Delete()
 			return false, &mesos.TaskInfo{}
 		}

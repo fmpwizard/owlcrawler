@@ -5,7 +5,7 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
-	"github.com/fmpwizard/owlcrawler/cloudant"
+	"github.com/fmpwizard/owlcrawler/couchdb"
 	log "github.com/golang/glog"
 	"github.com/iron-io/iron_go/mq"
 	exec "github.com/mesos/mesos-go/executor"
@@ -128,7 +128,7 @@ func (exec *exampleExecutor) fetchHTML(driver exec.ExecutorDriver, taskInfo *mes
 		log.Errorf("Error generating json to save in database, got: %v\n", err)
 	}
 
-	ret, err := cloudant.AddURLData(queueMessage.URL, pageData)
+	ret, err := couchdb.AddURLData(queueMessage.URL, pageData)
 	if err == nil {
 		//Send fethed url to parse queue
 		parseHTMLQueue := mq.New("html_to_parse")

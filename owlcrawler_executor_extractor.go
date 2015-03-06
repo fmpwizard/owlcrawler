@@ -3,7 +3,7 @@
 package main
 
 import (
-	"github.com/fmpwizard/owlcrawler/cloudant"
+	"github.com/fmpwizard/owlcrawler/couchdb"
 	"github.com/fmpwizard/owlcrawler/parse"
 	log "github.com/golang/glog"
 	"github.com/iron-io/iron_go/mq"
@@ -30,7 +30,7 @@ type OwlCrawlMsg struct {
 }
 
 var fn = func(url string) bool {
-	return !cloudant.IsURLThere(url)
+	return !couchdb.IsURLThere(url)
 }
 
 func newExampleExecutor() *exampleExecutor {
@@ -93,7 +93,7 @@ func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *m
 		queue.DeleteMessage(queueMessage.ID)
 	} else {
 		err = saveExtractedData(extractData(doc))
-		if err == cloudant.ERROR_NO_LATEST_VERSION {
+		if err == couchdb.ERROR_NO_LATEST_VERSION {
 			doc, err = getStoredHTMLForURL(queueMessage.URL)
 			if err != nil {
 				log.Errorf("Failed to get latest version of %s\n", queueMessage.URL)
@@ -125,7 +125,7 @@ func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *m
 	log.V(2).Infof("Task finished %s\n", taskInfo.GetName())
 }
 
-func extractData(doc cloudant.CouchDoc) cloudant.CouchDoc {
+func extractData(doc couchdb.CouchDoc) couchdb.CouchDoc {
 	doc.Text = parse.ExtractText(doc.HTML)
 	fetch, storing := parse.ExtractLinks(doc.HTML, doc.URL, fn)
 	doc.LinksToQueue = fetch.URL
@@ -137,14 +137,14 @@ func extractData(doc cloudant.CouchDoc) cloudant.CouchDoc {
 	return doc
 }
 
-func saveExtractedData(doc cloudant.CouchDoc) error {
+func saveExtractedData(doc couchdb.CouchDoc) error {
 	jsonDocWithExtractedData, err := json.Marshal(doc)
 	if err != nil {
 		return errors.New(fmt.Sprintf("Error generating json to save docWithText in database, got: %v\n", err))
 	}
-	ret, err := cloudant.SaveExtractedTextAndLinks(doc.ID, jsonDocWithExtractedData)
-	if err == cloudant.ERROR_NO_LATEST_VERSION {
-		return cloudant.ERROR_NO_LATEST_VERSION
+	ret, err := couchdb.SaveExtractedTextAndLinks(doc.ID, jsonDocWithExtractedData)
+	if err == couchdb.ERROR_NO_LATEST_VERSION {
+		return couchdb.ERROR_NO_LATEST_VERSION
 	}
 	if err != nil {
 		log.Errorf("Error was: %+v\n", err)
@@ -155,10 +155,10 @@ func saveExtractedData(doc cloudant.CouchDoc) error {
 	return nil
 }
 
-func getStoredHTMLForURL(url string) (cloudant.CouchDoc, error) {
-	doc, err := cloudant.GetURLData(url)
-	if err == cloudant.ERROR_404 {
-		return doc, cloudant.ERROR_404
+func getStoredHTMLForURL(url string) (couchdb.CouchDoc, error) {
+	doc, err := couchdb.GetURLData(url)
+	if err == couchdb.ERROR_404 {
+		return doc, couchdb.ERROR_404
 	}
 	if err != nil {
 		log.Errorf("Error was: %+v\n", err)
