@@ -41,7 +41,7 @@ type CouchDocCreated struct {
 }
 
 var ERROR_NO_LATEST_VERSION = errors.New("Not latest revision.")
-var ERROR_404 = errors.New("Doc not found.")
+var ERROR_404 = errors.New("Doc not found. ")
 
 func init() {
 	if u, err := user.Current(); err == nil {

@@ -4,3 +4,12 @@ owlcrawler-scheduler
 owlcrawler.sublime-workspace
 owlcrawler.sublime-project
 put_msg.sh
+#js stuff
+webapp/owlcrawlerweb/app/bower_components/
+node_modules/
+webapp/owlcrawlerweb/build/
+#webapp
+owlcrawlerweb.dart
+webapp/owlcrawlerweb/owlcrawlerweb
+
+
