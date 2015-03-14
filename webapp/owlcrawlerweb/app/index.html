@@ -37,32 +37,39 @@
         <div class="page-header">
           <h1>Search</h1>
         </div>
-        <p class="lead">This is a simple application written in go and using twitter flight for client side code.</p>
-        <p><a href="#" id="f-load-more" data-page="0">Load previous messages</a></p>
-        <div class="row">
-          <div class="col-sm-4">Time</div>
-          <div class="col-sm-6">Message</div>
-        </div>
-        <div id="message-list">
-          <div class="row f-message-row hidden" >
-            <div class="col-sm-4 f-time">diego</div>
-            <div class="col-sm-6 f-message"></div>
-          </div>
-          {{range .Messages}}
-            <div class="row f-message-row" id="{.Id}" >
-              <div class="col-sm-4 f-time">{{ .Stamp }}</div>
-              <!-- <div class="col-sm-4 f-time">{ UnixToString .Stamp }</div> -->
-              <div class="col-sm-6 f-message">{{.Value}}</div>
-            </div>
-          {{end}}
-        </div>
-        <form class="form-inline f-send-message" role="form">
+        <form class="form-inline f-send-message" role="form" action="/search">
           <div class="form-group col-sm-8">
             <label class="sr-only" for="term">Search Term</label>
-            <input type="text" class="form-control" id="term" placeholder="Search for something ...">
+            <input type="text" class="form-control" id="term" name="term" value="{{.Term}}" placeholder="Search for something ...">
           </div>
           <button type="submit" class="btn btn-primary">Search</button>
         </form>
+        <div id="message-list">
+          <div class="result-row hidden">
+            <div class="row f-message-row" >
+              <div class="col-sm-12 f-title"><a href="#">About Me</a></div>
+            </div>
+            <div class="row f-message-row" >
+              <div class="col-sm-12 f-url">http://www.blog.com</div>
+            </div>
+            <div class="row f-message-row" >
+              <div class="col-sm-12 f-snippet">Some cool text goes here, more and more.Some cool text goes here, more and more.Some cool text goes here, more and more.Some cool text goes here, more and more.Some cool text goes here, more and more.Some cool text goes here, more and more.Some cool text goes here, more and more.Some cool text goes here, more and more.Some cool text goes here, more and more.</div>
+            </div>
+          </div>
+          {{range .Results}}
+          <div class="result-row" id="{{.ID}}">
+            <div class="row f-message-row" >
+              <div class="col-sm-12 f-title"><a href="{{.URL}}">{{.Title}}</a></div>
+            </div>
+            <div class="row f-message-row" >
+              <div class="col-sm-12 f-url">{{.URL}}</div>
+            </div>
+            <div class="row f-message-row" >
+              <div class="col-sm-12 f-snippet">{{.Text}}</div>
+            </div>
+          </div>
+          {{end}}
+        </div>
       </div>
       
     </div>
@@ -77,11 +84,6 @@
     <script src="/bower_components/es5-shim/es5-shim.js"></script>
     <script src="/bower_components/es5-shim/es5-sham.js"></script>
     <![endif]-->
-    <script src="/bower_components/requirejs/require.js" data-main="build/main.js"></script>
-    <script type="text/javascript">
-      var cometId = {{.CometId}};
-      var index = {{.Index}};
-    </script>
-    
+    <script src="/bower_components/requirejs/require.js" data-main="build/main.js"></script>    
   </body>
 </html>
