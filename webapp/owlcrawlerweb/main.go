@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/fmpwizard/owlcrawler/elasticsearch"
 	"github.com/nu7hatch/gouuid"
 	"html/template"
 	"io/ioutil"
@@ -85,6 +86,7 @@ func init() {
 func main() {
 	flag.Parse()
 	http.HandleFunc("/index", showMessages)
+	http.HandleFunc("/api/search", search)
 	http.HandleFunc("/api/messages/new", createChatMessage)
 	http.HandleFunc("/api/messages/page", retrieveChatMessages)
 	http.HandleFunc("/api/comet", handleComet)
@@ -131,6 +133,27 @@ func createChatMessage(rw http.ResponseWriter, req *http.Request) {
 
 	}
 
+}
+
+func search(rw http.ResponseWriter, req *http.Request) {
+	term := req.FormValue("term")
+	log.Printf("term is %+v\n", term)
+	var ret elasticsearch.Result
+	err := elasticsearch.Search(term, &ret)
+	if err != nil {
+		fmt.Printf("Error searching, got %v", err)
+	}
+
+	jsonRet, err := json.Marshal(ret)
+	if err != nil {
+		fmt.Printf("Error marshalling %v", err)
+		rw.Header().Add("Content-Type", "text/plain")
+		rw.WriteHeader(http.StatusInternalServerError)
+	} else {
+		rw.Header().Add("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusOK)
+		rw.Write(jsonRet)
+	}
 }
 
 func retrieveChatMessages(rw http.ResponseWriter, req *http.Request) {

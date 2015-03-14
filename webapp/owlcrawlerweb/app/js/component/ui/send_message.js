@@ -11,10 +11,7 @@ define(function (require){
     this.handleSubmmit = function(event){
       event.preventDefault();
       var $message = this.select('messageInput');
-      var message = {
-        body: $message.val(),
-        createdOn: new Date().getTime()
-      };
+      var message = $message.val();
       $message.val('');
 
       this.trigger('uiMessageSent', {

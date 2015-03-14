@@ -18,10 +18,9 @@ define(function (require) {
 
     this.save = function( message ){
       var result = $.ajax({
-        type: 'PUT',
+        type: 'GET',
         contentType: 'application/json',
-        url: '/api/messages/new?cometid='+window.cometId,
-        data: JSON.stringify(message)
+        url: '/api/search?term='+message
       });
 
       return result;
