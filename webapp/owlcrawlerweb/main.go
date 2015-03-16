@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "expvar"
 	"flag"
 	"fmt"
 	"github.com/fmpwizard/owlcrawler/elasticsearch"
@@ -9,13 +10,15 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"runtime"
+	"strings"
 )
 
 type message struct {
 	ID    string
 	Title string
 	URL   string
-	Text  string
+	Text  template.HTML
 }
 
 type TemplateInfo struct {
@@ -31,6 +34,7 @@ func init() {
 }
 
 func main() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
 	http.HandleFunc("/index", search)
 	http.HandleFunc("/search", search)
@@ -42,7 +46,6 @@ func main() {
 
 func search(rw http.ResponseWriter, req *http.Request) {
 	term := req.FormValue("term")
-	log.Printf("term is %+v\n", term)
 	var ret elasticsearch.Result
 	err := elasticsearch.Search(term, &ret)
 	if err != nil {
@@ -56,10 +59,14 @@ func search(rw http.ResponseWriter, req *http.Request) {
 	rw.Header().Add("Content-Type", "text/html; charset=UTF-8")
 	var foundSet []*message
 	for _, row := range ret.Hits.Hits {
+		var txt string
+		for _, highlight := range row.Highlight.Text {
+			txt = txt + " ... " + highlight
+		}
 		foundSet = append(foundSet, &message{
 			ID:    row.Source.ID,
 			URL:   row.Source.URL,
-			Text:  row.Source.Text.Text[0],
+			Text:  sanitizeHTML(txt),
 			Title: row.Source.Text.Title,
 		})
 	}
@@ -68,7 +75,13 @@ func search(rw http.ResponseWriter, req *http.Request) {
 		Term:    term,
 	})
 	if err != nil {
-		log.Fatalf("got error: %s", err)
+		log.Printf("Error executing template, got: %s\n", err)
 	}
 
+}
+
+func sanitizeHTML(s string) template.HTML {
+	return template.HTML(
+		strings.Replace(
+			strings.Replace(s, "_-_strong_-_", "<strong>", -1), "_!-_strong_-_", "</strong>", -1))
 }
