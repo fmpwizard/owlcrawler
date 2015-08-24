@@ -9,6 +9,7 @@ import (
 	"github.com/iron-io/iron_go/mq"
 	exec "github.com/mesos/mesos-go/executor"
 	mesos "github.com/mesos/mesos-go/mesosproto"
+	"time"
 
 	"bytes"
 	"encoding/gob"
@@ -30,7 +31,7 @@ type OwlCrawlMsg struct {
 }
 
 var fn = func(url string) bool {
-	return !couchdb.IsURLThere(url)
+	return !couchdb.ShouldURLBeParsed(url)
 }
 
 func newExampleExecutor() *exampleExecutor {
@@ -130,6 +131,7 @@ func extractData(doc couchdb.CouchDoc) couchdb.CouchDoc {
 	fetch, storing := parse.ExtractLinks(doc.HTML, doc.URL, fn)
 	doc.LinksToQueue = fetch.URL
 	doc.Links = storing.URL
+	doc.ParsedOn = time.Now().UTC()
 	urlToFetchQueue := mq.New("urls_to_fetch")
 	for _, u := range fetch.URL {
 		urlToFetchQueue.PushString(u)

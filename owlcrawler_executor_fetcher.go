@@ -32,10 +32,10 @@ type OwlCrawlMsg struct {
 }
 
 type dataStore struct {
-	ID   string    `json:"_id"`
-	URL  string    `json:"url"`
-	HTML string    `json:"html"`
-	Date time.Time `json:"date"`
+	ID        string    `json:"_id"`
+	URL       string    `json:"url"`
+	HTML      string    `json:"html"`
+	FetchedOn time.Time `json:"fetched_on"`
 }
 
 func newExampleExecutor() *exampleExecutor {
@@ -117,10 +117,10 @@ func (exec *exampleExecutor) fetchHTML(driver exec.ExecutorDriver, taskInfo *mes
 		log.Errorf("Error deleting message id: %s from queue, got: %v\n", queueMessage.ID, err)
 	}
 	data := &dataStore{
-		ID:   base64.URLEncoding.EncodeToString([]byte(queueMessage.URL)),
-		URL:  queueMessage.URL,
-		HTML: string(htmlData[:]),
-		Date: time.Now().UTC(),
+		ID:        base64.URLEncoding.EncodeToString([]byte(queueMessage.URL)),
+		URL:       queueMessage.URL,
+		HTML:      string(htmlData[:]),
+		FetchedOn: time.Now().UTC(),
 	}
 
 	pageData, err := json.Marshal(data)

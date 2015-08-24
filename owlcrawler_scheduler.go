@@ -184,8 +184,7 @@ func fetchTask(queue *mq.Queue, sched *ExampleScheduler, workerID *mesos.SlaveID
 	}
 
 	for _, msg := range msgs {
-
-		if couchdb.IsURLThere(msg.Body) { //found an entry, no need to fetch it again
+		if couchdb.ShouldURLBeFetched(msg.Body) { //found an entry, no need to fetch it again
 			msg.Delete()
 			return false, &mesos.TaskInfo{}
 		}

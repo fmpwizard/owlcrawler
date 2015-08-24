@@ -3,6 +3,7 @@ package couchdb
 import (
 	"github.com/fmpwizard/owlcrawler/parse"
 	log "github.com/golang/glog"
+	"time"
 
 	"bytes"
 	"encoding/base64"
@@ -31,6 +32,8 @@ type CouchDoc struct {
 	Text         parse.PageStructure `json:"text"`
 	Links        []string            `json:"links"`
 	LinksToQueue []string            `json:"-"`
+	ParsedOn     time.Time           `json:"parsed_on"`
+	FetchedOn    time.Time           `json:"fetched_on"`
 }
 
 //CouchDocCreated represents a full document
@@ -161,8 +164,28 @@ func GetURLData(id string) (CouchDoc, error) {
 	return result, nil
 }
 
-//IsURLThere checks if the given url is already stored in the database
-func IsURLThere(target string) bool {
+//ShouldURLBeFetched checks if the given url is already stored in the database
+func ShouldURLBeFetched(target string) bool {
+	client := &http.Client{}
+	url := couchdbCredentials.URL + "/" + base64.URLEncoding.EncodeToString([]byte(target))
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Errorf("Error parsing url, got: %v\n", err)
+	}
+	req.SetBasicAuth(couchdbCredentials.User, couchdbCredentials.Password)
+	req.Header.Set("User-Agent", "OwlCrawler - https://github.com/fmpwizard/owlcrawler")
+	req.Header.Set("Accept", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Errorf("Error sending request to Couchdb, got: %v\n", err)
+	}
+	resp.Body.Close()
+	log.V(4).Infof(">>>  checking \n%s \n(%s) and got \n%t\n\n", url, target, resp.StatusCode != 404)
+	return resp.StatusCode != 404
+}
+
+//ShouldURLBeParsed checks if the given url is already stored in the database
+func ShouldURLBeParsed(target string) bool {
 	client := &http.Client{}
 	url := couchdbCredentials.URL + "/" + base64.URLEncoding.EncodeToString([]byte(target))
 	req, err := http.NewRequest("GET", url, nil)
