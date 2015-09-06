@@ -1,0 +1,10 @@
+---
+# natsd servers
+
+- hosts: natsdservers
+  sudo: yes
+  vars_files:
+    - vars/production.yml
+  roles:
+    - common
+    - natsd

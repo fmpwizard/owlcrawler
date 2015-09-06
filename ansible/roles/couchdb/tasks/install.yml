@@ -1,0 +1,5 @@
+---
+# This role installs couchdb 1.x
+- name: Install CouchDB
+  yum: name=couchdb state=latest
+  notify: Restart couchdb

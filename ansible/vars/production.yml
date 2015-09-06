@@ -1,0 +1,4 @@
+coucndh_conf_file: couchdb.conf.j2
+couchdb_port: 5984
+coucndh_admin_pwd: "this-isn-t-the-one"
+couchdb_data_dir: "/srv/couchdb-data"

@@ -1,0 +1,10 @@
+---
+# database servers
+
+- hosts: dbservers
+  sudo: yes
+  vars_files:
+    - vars/production.yml
+  roles:
+    - common
+    - couchdb

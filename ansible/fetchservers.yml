@@ -1,0 +1,16 @@
+---
+# fetch worker servers
+
+#To collect ip on etcd server to use on unit file for fetcher
+- hosts: etcdservers
+  name: Gather facts from collectors
+  tasks: [ ]
+
+- hosts: fetchservers
+  sudo: yes
+  vars_files:
+    - vars/production.yml
+  roles:
+    - common
+    - fetcher
+    - go

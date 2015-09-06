@@ -1,0 +1,11 @@
+---
+# etcd servers
+# ansible-playbook  etcdservers.yml -i  hosts/production  --check --ask-sudo-pass
+
+- hosts: etcdservers
+  sudo: yes
+  vars_files:
+    - vars/production.yml
+  roles:
+    - common
+    - etcd

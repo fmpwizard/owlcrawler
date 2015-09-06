@@ -1,0 +1,31 @@
+---
+#Install Natsd
+
+- name: Download x86_64 natsd tar
+  get_url: url=https://github.com/nats-io/gnatsd/releases/download/v0.6.6/gnatsd-v{{natsd_version}}-linux-amd64.tar.gz dest=/tmp/natsd-{{natsd_version}}.linux.tar.gz
+  when: ansible_architecture == "x86_64"
+
+- name: Download arm natsd tar
+  get_url: url=https://github.com/nats-io/gnatsd/releases/download/v0.6.6/gnatsd-v{{natsd_version}}-linux-arm.tar.gz dest=/tmp/natsd-{{natsd_version}}.linux.tar.gz
+  when: ansible_architecture == 'armv6l' or ansible_architecture == 'armv7l'
+
+- name: remove old natsd install
+  command: rm -rf /usr/local/natsd
+
+- name: Create /usr/local/natsd directory
+  file: path=/usr/local/natsd state=directory owner=root group=root
+
+- name: Unpack gzip file
+  command: tar -C /usr/local/natsd -xzf /tmp/natsd-{{natsd_version}}.linux.tar.gz --owner=root chdir=/usr/local/natsd
+
+- name: Create Unit file for NATS
+  template: src=unit-natsd.j2 dest=/usr/lib/systemd/system/natsd.service owner=root group=root mode=0644
+
+- name: reload systemd
+  command: /usr/bin/systemctl --system daemon-reload
+
+- name: enable natsd service
+  command: /usr/bin/systemctl enable natsd.service
+
+- name: start natsd service
+  command: /usr/bin/systemctl start natsd.service

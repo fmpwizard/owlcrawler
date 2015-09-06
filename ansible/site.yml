@@ -1,0 +1,9 @@
+---
+# all servers
+#ansible-playbook  site.yml -i  hosts/production   --ask-sudo-pass
+
+- include: dbservers.yml
+- include: etcdservers.yml
+- include: extractservers.yml
+- include: fetchservers.yml
+- include: natsdservers.yml

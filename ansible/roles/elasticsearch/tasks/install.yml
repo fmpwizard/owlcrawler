@@ -1,0 +1,18 @@
+---
+# Install elasticsearch
+
+- name: Import rpm key
+  - rpm_key: state=present key=https://packages.elastic.co/GPG-KEY-elasticsearch
+
+- name: Copy over Elasticsearch repo
+  template: src=elasticsearch.repo.j2 dest=/etc/yum.repos.d/elasticsearch.repo owner=root group=root mode=0644
+
+- name: install the latest version of ElasticSearch
+  yum: name=elasticsearch state=latest
+  notify: Restart elasticsearch
+
+- name: reload systemd
+  command: /usr/bin/systemctl --system daemon-reload
+
+- name: start ElasticSearch
+  service: name=elasticsearch state=running enabled=yes 

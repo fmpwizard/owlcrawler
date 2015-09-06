@@ -1,0 +1,5 @@
+---
+# copy app binary to server
+
+- name: "{{app_name}} - Copy Go binary to server"
+  copy: src="{{target_dir}}/src/github.com/fmpwizard/owlcrawler/owlcrawler-{{app_name}}" dest=/srv/owlcrawler/{{app_name}} owner=owlcrawler group=ops mode=0755

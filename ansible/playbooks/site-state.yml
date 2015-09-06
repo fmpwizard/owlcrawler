@@ -1,0 +1,15 @@
+---
+# start/stop/restart all apps
+# ansible-playbook -i hosts/production --ask-sudo-pass playbooks/site-state.yml --extra-vars "app_state=stopped"
+
+- hosts: fetchservers
+  sudo: yes
+  gather_facts: no
+  tasks:
+    - include: inc/app-state.yml app_name=fetcher
+
+- hosts: extractservers
+  sudo: yes
+  gather_facts: no
+  tasks:
+    - include: inc/app-state.yml app_name=extractor
