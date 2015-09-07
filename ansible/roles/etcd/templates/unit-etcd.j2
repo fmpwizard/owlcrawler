@@ -1,0 +1,11 @@
+[Unit]
+Description=etcd daemon
+After=network.target
+
+[Service]
+ExecStart=/usr/local/etcd/etcd
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

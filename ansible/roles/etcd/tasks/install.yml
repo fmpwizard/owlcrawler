@@ -1,0 +1,27 @@
+---
+#Install etcd
+
+- name: remove old etcd install
+  command: rm -rf /usr/local/etcd
+
+- name: Create /usr/local/etcd directory
+  file: path=/usr/local/etcd state=directory owner=root group=root
+
+- name: Download etcd binary
+  get_url: url=https://github.com/coreos/etcd/releases/download/v{{etcd_version}}/etcd-v{{etcd_version}}-linux-amd64.tar.gz dest=/tmp/etcd-{{etcd_version}}.linux.tar.gz
+  when: ansible_architecture == "x86_64"
+
+- name: Unpack gzip file
+  command: tar -C /usr/local/etcd -xzf /tmp/etcd-{{etcd_version}}.linux.tar.gz --owner=root chdir=/usr/local/etcd
+
+- name: Create Unit file for etcd
+  template: src=unit-etcd.j2 dest=/usr/lib/systemd/system/etcd.service owner=root group=root mode=0644
+
+- name: reload systemd
+  command: /usr/bin/systemctl --system daemon-reload
+
+- name: enable etcd service
+  command: /usr/bin/systemctl enable etcd.service
+
+- name: start etcd service
+  command: /usr/bin/systemctl start etcd.service
