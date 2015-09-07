@@ -1,0 +1,5 @@
+---
+
+- name: Enable workers
+  command: /usr/bin/systemctl --system daemon-reload
+  command: /usr/bin/systemctl enable owlcrawler-fetcher.service

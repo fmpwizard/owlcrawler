@@ -1,0 +1,11 @@
+[Unit]
+Description=OwnCrawler extractor daemon
+After=network.target
+
+[Service]
+ExecStart=/srv/owlcrawler/extractor --etcd-host {{ hostvars[groups['etcdservers'][0]]['ansible_eth0']['ipv4']['address'] }}
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

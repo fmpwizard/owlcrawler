@@ -1,0 +1,15 @@
+---
+# configure the worker servers
+
+- name: Create user to run workers as
+  user: name=owlcrawler shell=/bin/false
+
+- name: Create worker directory
+  file: path=/srv/owlcrawler-worker owner=owlcrawler group=ops mode=2775 state=directory
+
+- name: Create worker logs directory
+  file: path=/var/log/owlcrawler-worker owner=owlcrawler group=ops mode=2775 state=directory
+
+- name: Create Unit file - owlcrawler-extractor
+  template: src=unit-extractor.j2 dest=/usr/lib/systemd/system/owlcrawler-extractor.service owner=root group=root mode=0644
+  notify: Enable workers
