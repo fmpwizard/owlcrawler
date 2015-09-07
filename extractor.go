@@ -7,21 +7,13 @@ import (
 	"github.com/fmpwizard/owlcrawler/parse"
 	log "github.com/golang/glog"
 	"github.com/iron-io/iron_go/mq"
-	exec "github.com/mesos/mesos-go/executor"
-	mesos "github.com/mesos/mesos-go/mesosproto"
 	"time"
 
-	"bytes"
-	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 )
-
-type exampleExecutor struct {
-	tasksLaunched int
-}
 
 //OwlCrawlMsg is used to decode the Data payload from the framework
 type OwlCrawlMsg struct {
@@ -34,57 +26,10 @@ var fn = func(url string) bool {
 	return !couchdb.ShouldURLBeParsed(url)
 }
 
-func newExampleExecutor() *exampleExecutor {
-	return &exampleExecutor{tasksLaunched: 0}
-}
-
-func (exec *exampleExecutor) Registered(driver exec.ExecutorDriver, execInfo *mesos.ExecutorInfo, fwinfo *mesos.FrameworkInfo, slaveInfo *mesos.SlaveInfo) {
-	log.V(3).Infoln("Registered Executor on slave ", slaveInfo.GetHostname())
-}
-
-func (exec *exampleExecutor) Reregistered(driver exec.ExecutorDriver, slaveInfo *mesos.SlaveInfo) {
-	log.V(3).Infoln("Re-registered Executor on slave ", slaveInfo.GetHostname())
-}
-
-func (exec *exampleExecutor) Disconnected(exec.ExecutorDriver) {
-	log.V(3).Infoln("Executor disconnected.")
-}
-
-func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
-	log.V(2).Infof("Launching task %s\n", taskInfo.GetName())
-	runStatus := &mesos.TaskStatus{
-		TaskId: taskInfo.GetTaskId(),
-		State:  mesos.TaskState_TASK_RUNNING.Enum(),
-	}
-	_, err := driver.SendStatusUpdate(runStatus)
-	if err != nil {
-		log.Errorln("Got error %s\n", err)
-	}
-
-	exec.tasksLaunched++
-	log.V(2).Infof("Total tasks launched %s\n", exec.tasksLaunched)
-	go exec.extractText(driver, taskInfo)
-}
-
-func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
+func extractText(queueMessage *OwlCrawlMsg) {
 	//Read information about this URL we are about to process
-	payload := bytes.NewReader(taskInfo.GetData())
-	var queueMessage OwlCrawlMsg
-	dec := gob.NewDecoder(payload)
-	err := dec.Decode(&queueMessage)
-	if err != nil {
-		log.Errorln("decode error:", err)
-	}
 	queue := mq.New(queueMessage.QueueName)
 	if queueMessage.URL == "" {
-		runStatus := &mesos.TaskStatus{
-			TaskId: taskInfo.GetTaskId(),
-			State:  mesos.TaskState_TASK_FINISHED.Enum(),
-		}
-		_, err := driver.SendStatusUpdate(runStatus)
-		if err != nil {
-			log.Errorf("Failed to tell mesos that we were done, sorry, got: %v", err)
-		}
 		_ = queue.DeleteMessage(queueMessage.ID)
 		return
 	}
@@ -104,26 +49,10 @@ func (exec *exampleExecutor) extractText(driver exec.ExecutorDriver, taskInfo *m
 			saveExtractedData(extractData(doc))
 		} else if err != nil {
 			_ = queue.DeleteMessage(queueMessage.ID)
-			runStatus := &mesos.TaskStatus{
-				TaskId: taskInfo.GetTaskId(),
-				State:  mesos.TaskState_TASK_FAILED.Enum(),
-			}
-			_, err := driver.SendStatusUpdate(runStatus)
-			if err != nil {
-				log.Errorf("Failed to tell mesos that we died, sorry, got: %v", err)
-			}
 		}
 	}
 	// finish task
-	finStatus := &mesos.TaskStatus{
-		TaskId: taskInfo.GetTaskId(),
-		State:  mesos.TaskState_TASK_FINISHED.Enum(),
-	}
-	_, err = driver.SendStatusUpdate(finStatus)
-	if err != nil {
-		log.Errorln("Got error", err)
-	}
-	log.V(2).Infof("Task finished %s\n", taskInfo.GetName())
+	log.V(2).Infoln("Task finished")
 }
 
 func extractData(doc couchdb.CouchDoc) couchdb.CouchDoc {
@@ -170,43 +99,41 @@ func getStoredHTMLForURL(url string) (couchdb.CouchDoc, error) {
 	return doc, nil
 }
 
-func (exec *exampleExecutor) KillTask(exec.ExecutorDriver, *mesos.TaskID) {
-	log.V(3).Infoln("Kill task")
-}
-
-func (exec *exampleExecutor) FrameworkMessage(driver exec.ExecutorDriver, msg string) {
-	log.V(3).Infoln("Got framework message: ", msg)
-}
-
-func (exec *exampleExecutor) Shutdown(exec.ExecutorDriver) {
-	log.V(3).Infoln("Shutting down the executor ")
-}
-
-func (exec *exampleExecutor) Error(driver exec.ExecutorDriver, err string) {
-	log.Errorln("Got error message:", err)
-}
-
 // -------------------------- func inits () ----------------- //
 func init() {
 	flag.Parse()
 }
 
+var etcd = flag.String("etcd", "127.0.0.1", "etcd server")
+
 func main() {
-	log.V(2).Infoln("Starting Extractor Executor")
-
-	dconfig := exec.DriverConfig{
-		Executor: newExampleExecutor(),
+	log.V(2).Infoln("Starting Extractor")
+	htmlToParseQueueName := "html_to_parse"
+	htmlToParseQueue := mq.New(htmlToParseQueueName)
+	if ok, payload := extractTask(htmlToParseQueue); ok == true {
+		extractText(payload)
 	}
-	driver, err := exec.NewMesosExecutorDriver(dconfig)
+}
 
+func extractTask(queue *mq.Queue) (bool, *OwlCrawlMsg) {
+	msgs, err := queue.GetNWithTimeoutAndWait(1, 120, 30)
 	if err != nil {
-		log.Errorln("Unable to create a ExecutorDriver ", err.Error())
+		return false, &OwlCrawlMsg{}
 	}
 
-	_, err = driver.Start()
-	if err != nil {
-		log.Errorln("Got error:", err)
-		return
+	for _, msg := range msgs {
+		if couchdb.IsItParsed(msg.Body) {
+			log.Infof("Not going to re parse %s\n", msg.Body)
+			msg.Delete()
+			return false, &OwlCrawlMsg{}
+		}
+
+		var msgAndID = &OwlCrawlMsg{
+			URL:       msg.Body,
+			ID:        msg.Id,
+			QueueName: queue.Name,
+		}
+		return true, msgAndID
 	}
-	driver.Join()
+	return false, &OwlCrawlMsg{}
 }
