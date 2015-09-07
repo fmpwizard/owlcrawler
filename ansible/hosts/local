@@ -1,16 +1,16 @@
 localhost ansible_connection=local
 
-[fetch_servers]
+[fetchservers]
 localhost ansible_connection=local
 
-[extract_servers]
+[extractservers]
 localhost ansible_connection=local
 
 [dbservers]
 localhost ansible_connection=local
 
-[etc]
+[etcdservers]
 localhost ansible_connection=local
 
-[nats]
+[natsdservers]
 localhost ansible_connection=local
