@@ -1,0 +1,11 @@
+[Unit]
+Description=NATS daemon
+After=network.target
+
+[Service]
+ExecStart=/usr/local/natsd/gnatsd
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,47 @@
+---
+# deploy production
+# ansible-playbook -i hosts/production --ask-sudo-pass playbooks/deploy.yml
+
+- hosts: fetchservers
+  sudo: yes
+  gather_facts: no
+  vars:
+    target_dir: "{{ lookup('env', 'GOPATH')}}"
+  tasks:
+    - include: inc/app-copy-worker.yml app_name=fetcher
+
+- hosts: extractservers
+  sudo: yes
+  gather_facts: no
+  vars:
+    target_dir: "{{ lookup('env', 'GOPATH')}}"
+  tasks:
+    - include: inc/app-copy-worker.yml app_name=extractor
+
+
+# stop all workers
+- hosts: fetchservers
+  sudo: yes
+  gather_facts: no
+  tasks:
+    - include: inc/app-state.yml app_name=fetcher app_state=stopped
+
+- hosts: extractservers
+  sudo: yes
+  gather_facts: no
+  tasks:
+    - include: inc/app-state.yml app_name=extractor app_state=stopped
+
+# start workers
+- hosts: fetchservers
+  sudo: yes
+  gather_facts: no
+  tasks:
+    - include: inc/app-state.yml app_name=fetcher app_state=started
+
+# start workers
+- hosts: extractservers
+  sudo: yes
+  gather_facts: no
+  tasks:
+    - include: inc/app-state.yml app_name=extractor app_state=started

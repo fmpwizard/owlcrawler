@@ -1,0 +1,6 @@
+---
+# call start|stop|restart on an app
+
+- name: "{{app_name}} - {{app_state}}"
+  service: name=owlcrawler-{{app_name}} state={{app_state}}
+  ignore_errors: yes

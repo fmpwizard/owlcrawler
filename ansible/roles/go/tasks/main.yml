@@ -1,0 +1,17 @@
+---
+#Install Go
+
+- name: Install Go
+  yum: name=golang state=latest
+
+#- name: Download go tar
+#  get_url: url=https://storage.googleapis.com/golang/go{{go_version}}.linux-amd64.tar.gz dest=/tmp/go-{{go_version}}.linux-amd64.tar.gz
+#  tags: go
+#
+#- name: remove old Go install
+#  command: rm -rf /usr/local/go
+#  tags: go
+#
+#- name: Unpack gzip file
+#  command: tar -C /usr/local -xzf /tmp/go-{{go_version}}.linux-amd64.tar.gz --owner=root chdir=/usr/local
+#  tags: go

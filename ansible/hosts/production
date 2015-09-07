@@ -1,0 +1,14 @@
+[fetchservers]
+worker-01
+
+[extractservers]
+worker-01
+
+[dbservers]
+db-01
+
+[etcdservers]
+db-01
+
+[natsdservers]
+db-01

@@ -1,0 +1,16 @@
+---
+# common
+
+- name: Install basics
+  yum: pkg={{ item }} update_cache=yes state=installed
+  tags: common
+  with_items:
+    - curl
+    - vim
+
+- name: Display all variables/facts known for a host
+  debug: var=hostvars[inventory_hostname]
+  tags: facts
+
+- name: Add ops group
+  group: name=ops state=present
