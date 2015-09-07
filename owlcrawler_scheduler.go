@@ -178,7 +178,7 @@ func extractTask(queue *mq.Queue, sched *ExampleScheduler, workerID *mesos.Slave
 }
 
 func fetchTask(queue *mq.Queue, sched *ExampleScheduler, workerID *mesos.SlaveID) (bool, *mesos.TaskInfo) {
-	msgs, err := queue.GetNWithTimeoutAndWait(1, 120, 40)
+	msgs, err := queue.GetNWithTimeoutAndWait(1, 120, 30)
 	if err != nil {
 		return false, &mesos.TaskInfo{}
 	}
