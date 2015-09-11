@@ -3,7 +3,7 @@ Description=NATS daemon
 After=network.target
 
 [Service]
-ExecStart=/usr/local/natsd/gnatsd
+ExecStart=/usr/local/natsd/gnatsd -c /usr/local/natsd/natsd.conf
 Restart=on-failure
 RestartSec=10s
 

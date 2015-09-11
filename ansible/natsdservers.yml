@@ -1,6 +1,6 @@
 ---
 # natsd servers
-
+#ansible-playbook natsdservers.yml -i hosts/local --ask-sudo-pass  --tags natsd --extra-vars natsd_password=pass_here
 - hosts: natsdservers
   sudo: yes
   vars_files:

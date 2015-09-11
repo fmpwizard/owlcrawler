@@ -88,13 +88,8 @@ func fetchHTML(taskInfo *OwlCrawlMsg) {
 	log.V(2).Infof("Task finished")
 }
 
-func init() {
-	flag.Parse()
-}
-
-var etcd = flag.String("etcd", "127.0.0.1", "etcd server")
-
 func main() {
+	flag.Parse()
 	log.V(2).Infof("Starting Fetcher.")
 	urlToFetchQueueName := "urls_to_fetch"
 	urlToFetchQueue := mq.New(urlToFetchQueueName)
@@ -103,7 +98,6 @@ func main() {
 			fetchHTML(payload)
 		}
 	}
-
 }
 
 func fetchTask(queue *mq.Queue) (bool, *OwlCrawlMsg) {

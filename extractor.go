@@ -99,19 +99,15 @@ func getStoredHTMLForURL(url string) (couchdb.CouchDoc, error) {
 	return doc, nil
 }
 
-// -------------------------- func inits () ----------------- //
-func init() {
-	flag.Parse()
-}
-
-var etcd = flag.String("etcd", "127.0.0.1", "etcd server")
-
 func main() {
+	flag.Parse()
 	log.V(2).Infoln("Starting Extractor")
 	htmlToParseQueueName := "html_to_parse"
 	htmlToParseQueue := mq.New(htmlToParseQueueName)
-	if ok, payload := extractTask(htmlToParseQueue); ok == true {
-		extractText(payload)
+	for {
+		if ok, payload := extractTask(htmlToParseQueue); ok == true {
+			extractText(payload)
+		}
 	}
 }
 

@@ -18,6 +18,9 @@
 - name: Unpack gzip file
   command: tar -C /usr/local/natsd -xzf /tmp/natsd-{{natsd_version}}.linux.tar.gz --owner=root chdir=/usr/local/natsd
 
+- name: Copy conf file for NATS
+  template: src=natsd.conf.j2 dest=/usr/local/natsd/natsd.conf owner=root group=root mode=0600
+
 - name: Create Unit file for NATS
   template: src=unit-natsd.j2 dest=/usr/lib/systemd/system/natsd.service owner=root group=root mode=0644
 

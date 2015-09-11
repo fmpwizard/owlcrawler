@@ -3,7 +3,7 @@ Description=OwnCrawler extractor daemon
 After=network.target
 
 [Service]
-ExecStart=/srv/owlcrawler/extractor --etcd-host {{ hostvars[groups['etcdservers'][0]]['ansible_eth0']['ipv4']['address'] }}
+ExecStart=/srv/owlcrawler/extractor -logtostderr=true -v=2
 Restart=on-failure
 RestartSec=10s
 
