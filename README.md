@@ -1,23 +1,19 @@
 # OwlCrawler
 
-It's a distributed web crawler that uses mesos for scheduling workers, written in Go.
+It's a distributed web crawler that uses [nats.io](http://nats.io) to coordinate work, written in Go.
 
 ## Dependencies
 
 * CouchDB 1.x (tested on 1.6.1)
-* IronMQ account
+* gnatsd
 
 ## Building.
 
-Build the scheduler
-
-`go build -tags=fetcherSched -o owlcrawler-scheduler owlcrawler_scheduler.go`
-
-Build the two executors
+Build the two workers
 
 ```
-go build -tags=fetcherExec -o owlcrawler-executor-fetcher owlcrawler_executor_fetcher.go && \
-go build -tags=extractorExec -o owlcrawler-executor-extractor owlcrawler_executor_extractor.go 
+go build  -tags=fetcherExec -o owlcrawler-fetcher fetcher.go && \
+go build  -tags=extractorExec -o owlcrawler-extractor extractor.go
 ```
 
 ### Setup
@@ -37,16 +33,33 @@ Sample `.couchdb.json`
 
 ```
 
+3. create a file `.gnatsd.json` and place it in your `$HOME` directory
 
-## Run
 
-```
-./owlcrawler-scheduler \
---master=127.0.0.1:5050 \
---artifactPort=7070 \
---address=127.0.0.1 \
---logtostderr=true
+Sample `.gnatsd.json`
 
 ```
+{
+	"URL": "nats://owlcrawler:natsd_password@127.0.0.1:4222"
+}
 
-`artifactPort` and `address` point to the server that is hosting the executor, in this example, the framework has a built in http handler to serve the file
+```
+
+4. Start gnatsd with a user and password (use a config file, but for a quick test
+	you can pass parameters):
+
+```
+~/gnatsd --user owlcrawler --pass natsd_password
+```
+
+## On one terminal run:
+
+```
+./extractor -logtostderr=true -v=2
+```
+
+## On another terminal run:
+
+```
+./fetcher -logtostderr=true -v=2
+```
