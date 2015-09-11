@@ -2,7 +2,7 @@
 # fetch worker servers
 
 #To collect ip on etcd server to use on unit file for fetcher
-- hosts: etcdservers
+- hosts: natsdservers
   name: Gather facts from collectors
   tasks: [ ]
 
@@ -12,5 +12,6 @@
     - vars/production.yml
   roles:
     - common
-    - fetcher
+    - common-worker
     - go
+    - fetcher
