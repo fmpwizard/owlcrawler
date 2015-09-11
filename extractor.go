@@ -13,6 +13,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/ioutil"
+	"os/user"
+	"path/filepath"
 )
 
 //OwlCrawlMsg is used to decode the Data payload from the framework
@@ -24,6 +27,12 @@ type OwlCrawlMsg struct {
 
 var fn = func(url string) bool {
 	return !couchdb.ShouldURLBeParsed(url)
+}
+
+var gnatsdCredentials gnatsdCred
+
+type gnatsdCred struct {
+	URL string
 }
 
 func extractText(queueMessage *OwlCrawlMsg) {
@@ -132,4 +141,19 @@ func extractTask(queue *mq.Queue) (bool, *OwlCrawlMsg) {
 		return true, msgAndID
 	}
 	return false, &OwlCrawlMsg{}
+}
+
+func init() {
+	if u, err := user.Current(); err == nil {
+		path := filepath.Join(u.HomeDir, ".gnatsd.json")
+		content, err := ioutil.ReadFile(path)
+		if err != nil {
+			log.Fatalf("Error reading gnatds user file, got: %v\n", err)
+		}
+
+		err = json.Unmarshal(content, &gnatsdCredentials)
+		if err != nil {
+			log.Fatalf("Invalid gnatsd credentials file, got: %v\n", err)
+		}
+	}
 }

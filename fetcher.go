@@ -5,15 +5,19 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"flag"
 	"github.com/fmpwizard/owlcrawler/couchdb"
 	log "github.com/golang/glog"
-	"github.com/iron-io/iron_go/mq"
-
-	"flag"
+	"github.com/nats-io/nats"
 	"io/ioutil"
 	"net/http"
+	"os/user"
+	"path/filepath"
 	"time"
 )
+
+const fetchQueue = "fetch_url"
+const extractQueue = "extract_url"
 
 //OwlCrawlMsg is used to decode the Data payload from the framework
 type OwlCrawlMsg struct {
@@ -29,46 +33,43 @@ type dataStore struct {
 	FetchedOn time.Time `json:"fetched_on"`
 }
 
-func fetchHTML(taskInfo *OwlCrawlMsg) {
+var gnatsdCredentials gnatsdCred
+
+type gnatsdCred struct {
+	URL string
+}
+
+func fetchHTML(url []byte) {
 	log.V(2).Infoln("Total tasks launched")
 
-	queue := mq.New(taskInfo.QueueName)
+	nc, err := nats.Connect(gnatsdCredentials.URL)
+	if err != nil {
+		log.Fatalf("Could not connect to gnatsd, got: %s\n", err)
+	}
 
 	//Fetch url
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", taskInfo.URL, nil)
+	req, err := http.NewRequest("GET", string(url[:]), nil)
 	if err != nil {
-		log.Errorf("Error parsing url: %s, got: %v\n", taskInfo.URL, err)
+		log.Errorf("Error parsing url: %s, got: %v\n", string(url[:]), err)
 	}
 	req.Header.Set("User-Agent", "OwlCrawler - https://github.com/fmpwizard/owlcrawler")
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Errorf("Error while fetching url: %s, got error: %v\n", taskInfo.URL, err)
-		err = queue.ReleaseMessage(taskInfo.ID, 0)
-		if err != nil {
-			log.Errorf("Error releasing message id: %s from queue, got: %v\n", taskInfo.ID, err)
-		}
+		log.Errorf("Error while fetching url: %s, got error: %v\n", string(url[:]), err)
 		return
 	}
 
 	defer resp.Body.Close()
 	htmlData, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Errorf("Error while reading html for url: %s, got error: %v\n", taskInfo.URL, err)
-		err = queue.ReleaseMessage(taskInfo.ID, 0)
-		if err != nil {
-			log.Errorf("Error releasing message id: %s from queue, got: %v\n", taskInfo.ID, err)
-		}
+		log.Errorf("Error while reading html for url: %s, got error: %v\n", string(url[:]), err)
 		return
 	}
 
-	err = queue.DeleteMessage(taskInfo.ID)
-	if err != nil {
-		log.Errorf("Error deleting message id: %s from queue, got: %v\n", taskInfo.ID, err)
-	}
 	data := &dataStore{
-		ID:        base64.URLEncoding.EncodeToString([]byte(taskInfo.URL)),
-		URL:       taskInfo.URL,
+		ID:        base64.URLEncoding.EncodeToString([]byte(string(url[:]))),
+		URL:       string(url[:]),
 		HTML:      string(htmlData[:]),
 		FetchedOn: time.Now().UTC(),
 	}
@@ -78,11 +79,13 @@ func fetchHTML(taskInfo *OwlCrawlMsg) {
 		log.Errorf("Error generating json to save in database, got: %v\n", err)
 	}
 
-	ret, err := couchdb.AddURLData(taskInfo.URL, pageData)
+	ret, err := couchdb.AddURLData(string(url[:]), pageData)
 	if err == nil {
 		//Send fethed url to parse queue
-		parseHTMLQueue := mq.New("html_to_parse")
-		parseHTMLQueue.PushString(ret.ID)
+		err := nc.Publish(extractQueue, []byte(ret.ID))
+		if err != nil {
+			log.Errorf("Failed to push %s to extract queue\n", string(url[:]))
+		}
 	}
 
 	log.V(2).Infof("Task finished")
@@ -91,34 +94,31 @@ func fetchHTML(taskInfo *OwlCrawlMsg) {
 func main() {
 	flag.Parse()
 	log.V(2).Infof("Starting Fetcher.")
-	urlToFetchQueueName := "urls_to_fetch"
-	urlToFetchQueue := mq.New(urlToFetchQueueName)
+	nc, _ := nats.Connect(gnatsdCredentials.URL)
+	sub, err := nc.SubscribeSync(fetchQueue)
+	if err != nil {
+		log.Fatalf("Error while subscribing to fetch_url, got %s\n", err)
+	}
 	for {
-		if ok, payload := fetchTask(urlToFetchQueue); ok == true {
-			fetchHTML(payload)
+		if payload, err := sub.NextMsg(30 * time.Second); err == nil {
+			if couchdb.ShouldURLBeFetched(string(payload.Data[:])) {
+				fetchHTML(payload.Data)
+			}
 		}
 	}
 }
 
-func fetchTask(queue *mq.Queue) (bool, *OwlCrawlMsg) {
-	msgs, err := queue.GetNWithTimeoutAndWait(1, 120, 30)
-	if err != nil {
-		return false, &OwlCrawlMsg{}
-	}
-
-	for _, msg := range msgs {
-		if couchdb.ShouldURLBeFetched(msg.Body) { //found an entry, no need to fetch it again
-			msg.Delete()
-			return false, &OwlCrawlMsg{}
+func init() {
+	if u, err := user.Current(); err == nil {
+		path := filepath.Join(u.HomeDir, ".gnatsd.json")
+		content, err := ioutil.ReadFile(path)
+		if err != nil {
+			log.Fatalf("Error reading gnatds user file, got: %v\n", err)
 		}
 
-		var msgAndID = &OwlCrawlMsg{
-			URL:       msg.Body,
-			ID:        msg.Id,
-			QueueName: queue.Name,
+		err = json.Unmarshal(content, &gnatsdCredentials)
+		if err != nil {
+			log.Fatalf("Invalid gnatsd credentials file, got: %v\n", err)
 		}
-
-		return true, msgAndID
 	}
-	return false, &OwlCrawlMsg{}
 }
