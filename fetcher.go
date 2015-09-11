@@ -19,13 +19,6 @@ import (
 const fetchQueue = "fetch_url"
 const extractQueue = "extract_url"
 
-//OwlCrawlMsg is used to decode the Data payload from the framework
-type OwlCrawlMsg struct {
-	URL       string
-	ID        string
-	QueueName string
-}
-
 type dataStore struct {
 	ID        string    `json:"_id"`
 	URL       string    `json:"url"`
@@ -39,7 +32,7 @@ type gnatsdCred struct {
 	URL string
 }
 
-func fetchHTML(url []byte) {
+func fetchHTML(url string) {
 	log.V(2).Infoln("Total tasks launched")
 
 	nc, err := nats.Connect(gnatsdCredentials.URL)
@@ -49,27 +42,27 @@ func fetchHTML(url []byte) {
 
 	//Fetch url
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", string(url[:]), nil)
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		log.Errorf("Error parsing url: %s, got: %v\n", string(url[:]), err)
+		log.Errorf("Error parsing url: %s, got: %v\n", url, err)
 	}
 	req.Header.Set("User-Agent", "OwlCrawler - https://github.com/fmpwizard/owlcrawler")
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Errorf("Error while fetching url: %s, got error: %v\n", string(url[:]), err)
+		log.Errorf("Error while fetching url: %s, got error: %v\n", url, err)
 		return
 	}
 
 	defer resp.Body.Close()
 	htmlData, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Errorf("Error while reading html for url: %s, got error: %v\n", string(url[:]), err)
+		log.Errorf("Error while reading html for url: %s, got error: %v\n", url, err)
 		return
 	}
 
 	data := &dataStore{
-		ID:        base64.URLEncoding.EncodeToString([]byte(string(url[:]))),
-		URL:       string(url[:]),
+		ID:        base64.URLEncoding.EncodeToString([]byte(url)),
+		URL:       url,
 		HTML:      string(htmlData[:]),
 		FetchedOn: time.Now().UTC(),
 	}
@@ -79,16 +72,16 @@ func fetchHTML(url []byte) {
 		log.Errorf("Error generating json to save in database, got: %v\n", err)
 	}
 
-	ret, err := couchdb.AddURLData(string(url[:]), pageData)
+	ret, err := couchdb.AddURLData(url, pageData)
 	if err == nil {
 		//Send fethed url to parse queue
 		err := nc.Publish(extractQueue, []byte(ret.ID))
 		if err != nil {
-			log.Errorf("Failed to push %s to extract queue\n", string(url[:]))
+			log.Errorf("Failed to push %s to extract queue\n", url)
 		}
 	}
 
-	log.V(2).Infof("Task finished")
+	log.V(2).Infof("Finished getting %s", url)
 }
 
 func main() {
@@ -102,7 +95,7 @@ func main() {
 	for {
 		if payload, err := sub.NextMsg(30 * time.Second); err == nil {
 			if couchdb.ShouldURLBeFetched(string(payload.Data[:])) {
-				fetchHTML(payload.Data)
+				fetchHTML(string(payload.Data[:]))
 			}
 		}
 	}

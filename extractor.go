@@ -3,65 +3,45 @@
 package main
 
 import (
+	"encoding/json"
+	"flag"
+	"fmt"
 	"github.com/fmpwizard/owlcrawler/couchdb"
 	"github.com/fmpwizard/owlcrawler/parse"
 	log "github.com/golang/glog"
-	"github.com/iron-io/iron_go/mq"
-	"time"
-
-	"encoding/json"
-	"errors"
-	"flag"
-	"fmt"
+	"github.com/nats-io/nats"
 	"io/ioutil"
 	"os/user"
 	"path/filepath"
+	"time"
 )
 
-//OwlCrawlMsg is used to decode the Data payload from the framework
-type OwlCrawlMsg struct {
-	URL       string
-	ID        string
-	QueueName string
-}
+const extractQueue = "extract_url"
+const fetchQueue = "fetch_url"
 
 var fn = func(url string) bool {
 	return !couchdb.ShouldURLBeParsed(url)
 }
-
 var gnatsdCredentials gnatsdCred
 
 type gnatsdCred struct {
 	URL string
 }
 
-func extractText(queueMessage *OwlCrawlMsg) {
-	//Read information about this URL we are about to process
-	queue := mq.New(queueMessage.QueueName)
-	if queueMessage.URL == "" {
-		_ = queue.DeleteMessage(queueMessage.ID)
-		return
-	}
-
-	doc, err := getStoredHTMLForURL(queueMessage.URL)
-	if err != nil {
-		queue.DeleteMessage(queueMessage.ID)
-	} else {
+func extractText(id string) {
+	doc, err := getStoredHTMLForDocID(id)
+	if err == nil {
 		err = saveExtractedData(extractData(doc))
 		if err == couchdb.ERROR_NO_LATEST_VERSION {
-			doc, err = getStoredHTMLForURL(queueMessage.URL)
+			doc, err = getStoredHTMLForDocID(id)
 			if err != nil {
-				log.Errorf("Failed to get latest version of %s\n", queueMessage.URL)
-				queue.DeleteMessage(queueMessage.ID)
+				log.Errorf("Failed to get latest version of %s\n", id)
 				return
 			}
 			saveExtractedData(extractData(doc))
-		} else if err != nil {
-			_ = queue.DeleteMessage(queueMessage.ID)
 		}
 	}
-	// finish task
-	log.V(2).Infoln("Task finished")
+	log.V(2).Infof("Finished extracting text for %s\n", id)
 }
 
 func extractData(doc couchdb.CouchDoc) couchdb.CouchDoc {
@@ -70,9 +50,12 @@ func extractData(doc couchdb.CouchDoc) couchdb.CouchDoc {
 	doc.LinksToQueue = fetch.URL
 	doc.Links = storing.URL
 	doc.ParsedOn = time.Now().UTC()
-	urlToFetchQueue := mq.New("urls_to_fetch")
+	nc, err := nats.Connect(gnatsdCredentials.URL)
+	if err != nil {
+		log.Fatalf("Could not connect to gnatsd, got: %s\n", err)
+	}
 	for _, u := range fetch.URL {
-		urlToFetchQueue.PushString(u)
+		nc.Publish(fetchQueue, []byte(u))
 	}
 	return doc
 }
@@ -80,7 +63,7 @@ func extractData(doc couchdb.CouchDoc) couchdb.CouchDoc {
 func saveExtractedData(doc couchdb.CouchDoc) error {
 	jsonDocWithExtractedData, err := json.Marshal(doc)
 	if err != nil {
-		return errors.New(fmt.Sprintf("Error generating json to save docWithText in database, got: %v\n", err))
+		return fmt.Errorf("Error generating json to save docWithText in database, got: %v\n", err)
 	}
 	ret, err := couchdb.SaveExtractedTextAndLinks(doc.ID, jsonDocWithExtractedData)
 	if err == couchdb.ERROR_NO_LATEST_VERSION {
@@ -95,8 +78,8 @@ func saveExtractedData(doc couchdb.CouchDoc) error {
 	return nil
 }
 
-func getStoredHTMLForURL(url string) (couchdb.CouchDoc, error) {
-	doc, err := couchdb.GetURLData(url)
+func getStoredHTMLForDocID(id string) (couchdb.CouchDoc, error) {
+	doc, err := couchdb.GetURLData(id)
 	if err == couchdb.ERROR_404 {
 		return doc, couchdb.ERROR_404
 	}
@@ -111,36 +94,18 @@ func getStoredHTMLForURL(url string) (couchdb.CouchDoc, error) {
 func main() {
 	flag.Parse()
 	log.V(2).Infoln("Starting Extractor")
-	htmlToParseQueueName := "html_to_parse"
-	htmlToParseQueue := mq.New(htmlToParseQueueName)
-	for {
-		if ok, payload := extractTask(htmlToParseQueue); ok == true {
-			extractText(payload)
-		}
-	}
-}
-
-func extractTask(queue *mq.Queue) (bool, *OwlCrawlMsg) {
-	msgs, err := queue.GetNWithTimeoutAndWait(1, 120, 30)
+	nc, _ := nats.Connect(gnatsdCredentials.URL)
+	sub, err := nc.SubscribeSync(extractQueue)
 	if err != nil {
-		return false, &OwlCrawlMsg{}
+		log.Fatalf("Error while subscribing to extract_url, got %s\n", err)
 	}
-
-	for _, msg := range msgs {
-		if couchdb.IsItParsed(msg.Body) {
-			log.Infof("Not going to re parse %s\n", msg.Body)
-			msg.Delete()
-			return false, &OwlCrawlMsg{}
+	for {
+		if payload, err := sub.NextMsg(30 * time.Second); err == nil {
+			if !couchdb.IsItParsed(string(payload.Data[:])) {
+				extractText(string(payload.Data[:]))
+			}
 		}
-
-		var msgAndID = &OwlCrawlMsg{
-			URL:       msg.Body,
-			ID:        msg.Id,
-			QueueName: queue.Name,
-		}
-		return true, msgAndID
 	}
-	return false, &OwlCrawlMsg{}
 }
 
 func init() {
