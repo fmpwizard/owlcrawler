@@ -33,7 +33,7 @@ type gnatsdCred struct {
 }
 
 func fetchHTML(url string) {
-	log.V(2).Infoln("Total tasks launched")
+	log.V(2).Infof("Fetching %s\n", url)
 
 	nc, err := nats.Connect(gnatsdCredentials.URL)
 	if err != nil {
@@ -80,7 +80,6 @@ func fetchHTML(url string) {
 			log.Errorf("Failed to push %s to extract queue\n", url)
 		}
 	}
-
 	log.V(2).Infof("Finished getting %s", url)
 }
 
