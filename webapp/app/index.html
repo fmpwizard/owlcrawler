@@ -53,12 +53,14 @@
         </form>
       </div>
 
-      <div class="row marketing">
+      {{range .Results}}
+      <div class="row marketing" id="{{.ID}}">
         <div class="col-lg-6">
-          <h4><a href="https://example.com">Page title</a></h4>
-          <p>Some text snippet</p>
+          <h4><a href="{{.URL}}">{{.Title}}</a></h4>
+          <p>{{.Text}}</p>
         </div>
       </div>
+      {{end}}
     </div>
 
 
