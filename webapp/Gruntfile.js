@@ -58,27 +58,44 @@ module.exports = function (grunt) {
     },
 
     browserSync: {
-      options: {
+      dev: {
+        bsFiles: {
+          src : [
+            '<%= config.app %>/{,*/}*.html',
+            '.tmp/styles/{,*/}*.css',
+            '<%= config.app %>/images/{,*/}*',
+            '.tmp/scripts/{,*/}*.js'
+          ]
+        },
+        options: {
+          watchTask: true,
+          proxy: 'localhost:7070',
+          open: false,
+          ghostMode: false,
+          notify: false
+        }
+      },
+      /*options: {
         notify: false,
         background: true
       },
       livereload: {
         options: {
-          files: [
-            '<%= config.app %>/{,*/}*.html',
-            '.tmp/styles/{,*/}*.css',
-            '<%= config.app %>/images/{,*/}*',
-            '.tmp/scripts/{,*/}*.js'
-          ],
-          port: 9000,
-          server: {
+          files: [*/
+            //'<%= config.app %>/{,*/}*.html',
+            //'.tmp/styles/{,*/}*.css',
+            //'<%= config.app %>/images/{,*/}*',
+            //'.tmp/scripts/{,*/}*.js'
+          //],
+          //port: 9000,
+          /*server: {
             baseDir: ['.tmp', config.app],
             routes: {
               '/bower_components': './bower_components'
             }
           }
         }
-      },
+      },*/
       test: {
         options: {
           port: 9001,
@@ -401,7 +418,7 @@ module.exports = function (grunt) {
       'wiredep',
       'concurrent:server',
       'postcss',
-      'browserSync:livereload',
+      'browserSync:dev',
       'watch'
     ]);
   });

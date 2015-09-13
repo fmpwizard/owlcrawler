@@ -66,8 +66,8 @@
 
     <!-- build:js(.) scripts/vendor.js -->
     <!-- bower:js -->
-    <script src="/bower_components/modernizr/modernizr.js"></script>
-    <script src="/bower_components/jquery/dist/jquery.js"></script>
+    <script src='/bower_components/modernizr/modernizr.js'></script>
+    <script src='/bower_components/jquery/dist/jquery.js'></script>
     <!-- endbower -->
     <!-- endbuild -->
 
@@ -101,5 +101,9 @@
       r.parentNode.insertBefore(e,r)}(window,document,'script','ga'));
       ga('create','UA-XXXXX-X');ga('send','pageview');
     </script>
+    <script type='text/javascript' id="__bs_script__">//<![CDATA[
+        document.write("<script async src='http://HOST:3000/browser-sync/browser-sync-client.2.9.3.js'><\/script>".replace("HOST", location.hostname));
+    //]]></script>
+
   </body>
 </html>
