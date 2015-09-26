@@ -30,10 +30,10 @@ type CouchDoc struct {
 	URL          string              `json:"url"`
 	HTML         string              `json:"html"`
 	Text         parse.PageStructure `json:"text"`
-	Links        []string            `json:"links"`
+	Links        []string            `json:"links,omitempty"`
 	LinksToQueue []string            `json:"-"`
-	ParsedOn     time.Time           `json:"parsed_on"`
-	FetchedOn    time.Time           `json:"fetched_on"`
+	ParsedOn     time.Time           `json:"parsed_on,omitempty"`
+	FetchedOn    time.Time           `json:"fetched_on,omitempty"`
 }
 
 //CouchDocCreated represents a full document
@@ -43,8 +43,22 @@ type CouchDocCreated struct {
 	Rev string `json:"rev"`
 }
 
-var ERROR_NO_LATEST_VERSION = errors.New("Not latest revision.")
-var ERROR_404 = errors.New("Doc not found. ")
+type couchStatsRet struct {
+	Rows []struct {
+		Value int `json:"value"`
+	}
+}
+
+//StatsIndex Stats related to the search engine index
+type StatsIndex struct {
+	Parsed, Fetched int
+}
+
+//ERROR_NO_LATEST_VERSION error you get when trying to save an old version of a CouchDB document
+var ErrorNoLatestVersion = errors.New("Not latest revision.")
+
+//Error404 the error you get when no document was found
+var Error404 = errors.New("Doc not found. ")
 
 func init() {
 	if u, err := user.Current(); err == nil {
@@ -94,6 +108,8 @@ func AddURLData(url string, data []byte) (CouchDocCreated, error) {
 	return ret, nil
 }
 
+//SaveExtractedTextAndLinks updates the document with extraced information
+//like text and links
 func SaveExtractedTextAndLinks(id string, data []byte) (CouchDocCreated, error) {
 	client := &http.Client{}
 	document := bytes.NewReader(data)
@@ -115,7 +131,7 @@ func SaveExtractedTextAndLinks(id string, data []byte) (CouchDocCreated, error) 
 		log.Errorf("Error parsing result of saving document, got: %v\n", err)
 	}
 	if resp.StatusCode == 409 {
-		return CouchDocCreated{}, ERROR_NO_LATEST_VERSION
+		return CouchDocCreated{}, ErrorNoLatestVersion
 	}
 	err = json.Unmarshal(body, &ret)
 	if err != nil {
@@ -158,7 +174,7 @@ func GetURLData(id string) (CouchDoc, error) {
 		log.Errorf("Error unmarshalling GetURLData body:\n%s\n into a struct, got: %v\n", string(body), err)
 	}
 	if resp.StatusCode == 404 {
-		return CouchDoc{ID: id}, ERROR_404
+		return CouchDoc{ID: id}, Error404
 	}
 
 	return result, nil
@@ -206,44 +222,50 @@ func ShouldURLBeParsed(target string) bool {
 
 //IsItParsed checks if the given url is already parsed
 func IsItParsed(target string) bool {
-	client := &http.Client{}
 	url := couchdbCredentials.URL + "/" + target
-	req, err := http.NewRequest("GET", url, nil)
+	var doc CouchDoc
+	json.Unmarshal(fetchData(url), &doc)
+	log.V(4).Infof(">>>  checking \n%s and got \n%t\n\n", url, len(doc.Text.Text) > 0)
+	return len(doc.Text.Text) > 0
+}
+
+//IndexStats returns stats related to the index, cnt of parsed/fetched/etc
+func IndexStats() *StatsIndex {
+	return &StatsIndex{
+		parsedCnt(),
+		fetchCnt(),
+	}
+}
+
+func parsedCnt() int {
+	url := couchdbCredentials.URL + "/_design/reports/_view/parsedCnt"
+	var stat couchStatsRet
+	json.Unmarshal(fetchData(url), &stat)
+	return stat.Rows[0].Value
+}
+
+func fetchCnt() int {
+	url := couchdbCredentials.URL + "/_design/reports/_view/fetchdCnt"
+	var stat couchStatsRet
+	json.Unmarshal(fetchData(url), &stat)
+	return stat.Rows[0].Value
+}
+
+func fetchData(url string) []byte {
+	client := &http.Client{}
+	parsedCnt := couchdbCredentials.URL + url
+	req, err := http.NewRequest("GET", parsedCnt, nil)
 	if err != nil {
-		log.Errorf("Error parsing url, got: %v\n", err)
+		log.Errorf("Error parsing parsedCnt design view, got: %v\n", err)
 	}
 	req.SetBasicAuth(couchdbCredentials.User, couchdbCredentials.Password)
 	req.Header.Set("User-Agent", "OwlCrawler - https://github.com/fmpwizard/owlcrawler")
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Errorf("Error sending request to Couchdb, got: %v\n", err)
+		log.Errorf("Error sending request to Couchdb parsedCnt view, got: %v\n", err)
 	}
 	defer resp.Body.Close()
-	var doc CouchDoc
 	body, _ := ioutil.ReadAll(resp.Body)
-	json.Unmarshal(body, &doc)
-	log.V(4).Infof(">>>  checking \n%s and got \n%t\n\n", url, len(doc.Text.Text) > 0)
-	return len(doc.Text.Text) > 0
+	return body
 }
-
-/*Design views:
-index name by-url
-function(doc) {
-    if(doc.url){
-        emit(doc.url, 1);
-    }
-}
-
-reduce _count
-
-index name doc
-function(doc) {
-    if(doc.url && doc.html){
-        var ret = {"html": doc.html, "rev": doc._rev};
-        emit(doc.url,  ret);
-    }
-}
-
-
-*/

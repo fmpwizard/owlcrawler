@@ -1,0 +1,29 @@
+/*adding views to couch at http://localhost:5984/_utils/database.html?owl-crawler/_design/reports2/_view/parsedCnt*/
+//http://localhost:5984/owl-crawler/_design/reports/_view/fetchCnt
+{
+  "_id" : "_design/reports",
+  "views" : {
+    "fetchCnt" : {
+      "map": "function(doc) { if (doc.fetched_on)  emit(doc.id, 1) }",
+      "reduce" : "_sum"
+    },
+    "parsedCnt" : {
+      "map": "function(doc) { if (doc.parsed_on)  emit(doc.id, 1) }",
+      "reduce" : "_sum"
+    }
+  }
+}
+
+
+
+
+{
+  "_id" : "_design/reports",
+  "views" : {
+    "fetchCnt" : {
+      "map" : "function(doc){emit(doc._id,{     \"url\" : doc.url,      \"fetched_on\": doc.fetched_on,      \"parsed_on\": doc.parsed_on,    }  )}"
+      "map": "function(doc) { if (doc.fetched_on)  emit(doc.id, 1) }",
+      "reduce" : "_count"
+    }
+  }
+}

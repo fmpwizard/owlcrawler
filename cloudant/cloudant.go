@@ -40,7 +40,7 @@ type CouchDocCreated struct {
 	Rev string `json:"rev"`
 }
 
-var ERROR_NO_LATEST_VERSION = errors.New("Not latest revision.")
+var ErrorNoLatestVersion = errors.New("Not latest revision.")
 var ERROR_404 = errors.New("Doc not found.")
 
 func init() {
@@ -112,7 +112,7 @@ func SaveExtractedTextAndLinks(id string, data []byte) (CouchDocCreated, error) 
 		log.Errorf("Error parsing result of saving document, got: %v\n", err)
 	}
 	if resp.StatusCode == 409 {
-		return CouchDocCreated{}, ERROR_NO_LATEST_VERSION
+		return CouchDocCreated{}, ErrorNoLatestVersion
 	}
 	err = json.Unmarshal(body, &ret)
 	if err != nil {

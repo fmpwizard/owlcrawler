@@ -26,6 +26,7 @@ type message struct {
 	Text  template.HTML
 }
 
+//TemplateInfo holds search results for the html template
 type TemplateInfo struct {
 	Results []*message
 	Term    string
@@ -59,8 +60,10 @@ func init() {
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
+	http.HandleFunc("/", search)
 	http.HandleFunc("/index", search)
 	http.HandleFunc("/add-site", addSiteToIndex)
+	http.HandleFunc("/index-status", indexStatus)
 	http.Handle("/bower_components/", http.StripPrefix("/bower_components/", http.FileServer(http.Dir("bower_components"))))
 	http.Handle("/styles/", http.StripPrefix("/styles/", http.FileServer(http.Dir(".tmp/styles"))))
 	http.Handle("/scripts/", http.StripPrefix("/scripts/", http.FileServer(http.Dir("app/scripts"))))
@@ -148,5 +151,17 @@ func addSiteToIndex(rw http.ResponseWriter, req *http.Request) {
 			log.Errorf("Error executing template, got: %s\n", err)
 		}
 	}
+}
 
+func indexStatus(rw http.ResponseWriter, req *http.Request) {
+	t := template.New("index-status.html")
+	t, err := t.ParseFiles(path.Join(rootDir, "app/index-status.html"))
+	if err != nil {
+		log.Errorf("Error parsing template files: %v", err)
+	}
+	rw.Header().Add("Content-Type", "text/html; charset=UTF-8")
+	err = t.ExecuteTemplate(rw, "index-status.html", "Boom")
+	if err != nil {
+		log.Errorf("Error executing template, got: %s\n", err)
+	}
 }

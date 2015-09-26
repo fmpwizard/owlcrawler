@@ -32,7 +32,7 @@ func extractText(id string) {
 	doc, err := getStoredHTMLForDocID(id)
 	if err == nil {
 		err = saveExtractedData(extractData(doc))
-		if err == couchdb.ERROR_NO_LATEST_VERSION {
+		if err == couchdb.ErrorNoLatestVersion {
 			doc, err = getStoredHTMLForDocID(id)
 			if err != nil {
 				log.Errorf("Failed to get latest version of %s\n", id)
@@ -66,8 +66,8 @@ func saveExtractedData(doc couchdb.CouchDoc) error {
 		return fmt.Errorf("Error generating json to save docWithText in database, got: %v\n", err)
 	}
 	ret, err := couchdb.SaveExtractedTextAndLinks(doc.ID, jsonDocWithExtractedData)
-	if err == couchdb.ERROR_NO_LATEST_VERSION {
-		return couchdb.ERROR_NO_LATEST_VERSION
+	if err == couchdb.ErrorNoLatestVersion {
+		return couchdb.ErrorNoLatestVersion
 	}
 	if err != nil {
 		log.Errorf("Error was: %+v\n", err)
