@@ -12,8 +12,8 @@ It's a distributed web crawler that uses [nats.io](http://nats.io) to coordinate
 Build the two workers
 
 ```
-go build  -tags=fetcherExec -o owlcrawler-fetcher fetcher.go && \
-go build  -tags=extractorExec -o owlcrawler-extractor extractor.go
+go build  -tags=fetcherExec -o fetcher fetcher.go && \
+go build  -tags=extractorExec -o extractor extractor.go
 ```
 
 ### Setup
@@ -52,26 +52,26 @@ Sample `.gnatsd.json`
 ~/gnatsd --user owlcrawler --pass natsd_password
 ```
 
-## On terminal 1 run:
+#### On terminal 1 run:
 
 ```
 ./extractor -logtostderr=true -v=3
 ```
 
-## On terminal 2 run:
+#### On terminal 2 run:
 
 ```
 ./fetcher -logtostderr=true -v=3
 ```
 
-## On terminal 3 run:
+#### On terminal 3 run:
 
 ```
 cd webapp
 go build && ./webapp -alsologtostderr=true
 ```
 
-## On terminal 4 run:
+#### On terminal 4 run:
 
 ```
 cd webapp
