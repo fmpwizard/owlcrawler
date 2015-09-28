@@ -24,16 +24,15 @@ go build  -tags=extractorExec -o extractor extractor.go
     Sample `.couchdb.json`
 
     ```
-		{
-			"user": "user-here",
-			"password": "super-secret-password",
-			"url": "http://localhost:5984/owl-crawler"
-		}
+{
+  "user": "user-here",
+  "password": "super-secret-password",
+  "url": "http://localhost:5984/owl-crawler"
+}
 
     ```
 
 3. create a file `.gnatsd.json` and place it in your `$HOME` directory
-
 
 		Sample `.gnatsd.json`
 
