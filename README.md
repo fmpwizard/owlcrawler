@@ -52,14 +52,28 @@ Sample `.gnatsd.json`
 ~/gnatsd --user owlcrawler --pass natsd_password
 ```
 
-## On one terminal run:
+## On terminal 1 run:
 
 ```
-./extractor -logtostderr=true -v=2
+./extractor -logtostderr=true -v=3
 ```
 
-## On another terminal run:
+## On terminal 2 run:
 
 ```
-./fetcher -logtostderr=true -v=2
+./fetcher -logtostderr=true -v=3
+```
+
+## On terminal 3 run:
+
+```
+cd webapp
+go build && ./webapp -alsologtostderr=true
+```
+
+## On terminal 4 run:
+
+```
+cd webapp
+grunt serve
 ```
