@@ -21,7 +21,7 @@ go build  -tags=extractorExec -o extractor extractor.go
 1. Setup couchdb with at least one admin user, you can follow the instructions [here](http://stackoverflow.com/a/6418670/309896)
 2. create a file `.couchdb.json` and place it in your `$HOME` directory
 
-    Sample `.couchdb.json`
+ Sample `.couchdb.json`
 
     ```
 {
@@ -34,7 +34,7 @@ go build  -tags=extractorExec -o extractor extractor.go
 
 3. create a file `.gnatsd.json` and place it in your `$HOME` directory
 
-		Sample `.gnatsd.json`
+ Sample `.gnatsd.json`
 
     ```
     {
