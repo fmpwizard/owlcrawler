@@ -10,6 +10,7 @@ import (
 	"strings"
 )
 
+//PageStructure holds the parsed/extracted data from a page
 type PageStructure struct {
 	Title string   `json:"title,omitempty"`
 	H1    []string `json:"h1,omitempty"`
@@ -19,13 +20,16 @@ type PageStructure struct {
 	Text  []string `json:"text,omitempty"`
 }
 
+//ExtractedLinks holds the current url we parsed and the links extracted from it
 type ExtractedLinks struct {
 	OriginalURL string
 	URL         []string
 }
 
+//URLFetchChecker is a function that tells us if we should fetch a link or not
 type URLFetchChecker func(url string) bool
 
+//ExtractText extracts text from a page
 func ExtractText(payload string) PageStructure {
 	var page PageStructure
 
@@ -50,6 +54,8 @@ Loop:
 				tok = atom.H3
 			} else if token.DataAtom == atom.H4 {
 				tok = atom.H4
+			} else if token.DataAtom == atom.Script {
+				tok = atom.Script
 			} else {
 				tok = 0
 			}
@@ -66,6 +72,10 @@ Loop:
 				page.H3 = append(page.H3, txt)
 			} else if txt := strings.TrimSpace(token.Data); len(txt) > 0 && tok == atom.H4 {
 				page.H4 = append(page.H4, txt)
+			} else if txt := strings.TrimSpace(token.Data); len(txt) > 0 && tok == atom.H4 {
+				page.H4 = append(page.H4, txt)
+			} else if txt := strings.TrimSpace(token.Data); len(txt) > 0 && tok == atom.Script {
+				continue
 			} else if txt := strings.TrimSpace(token.Data); len(txt) > 0 {
 				page.Text = append(page.Text, txt)
 			}
@@ -74,6 +84,7 @@ Loop:
 	return page
 }
 
+//ExtractLinks gets links from a page
 func ExtractLinks(payload string, originalURL string, shouldFetch URLFetchChecker) (toFetch ExtractedLinks, toStore ExtractedLinks) {
 	link, err := url.Parse(originalURL)
 	if err != nil {

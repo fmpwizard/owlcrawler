@@ -45,7 +45,8 @@ type CouchDocCreated struct {
 
 type couchStatsRet struct {
 	Rows []struct {
-		Value int `json:"value"`
+		Key   string `json:"key"`
+		Value int    `json:"value"`
 	}
 }
 
@@ -196,28 +197,8 @@ func ShouldURLBeFetched(target string) bool {
 		log.Errorf("Error sending request to Couchdb, got: %v\n", err)
 	}
 	resp.Body.Close()
-	log.V(4).Infof(">>>  checking \n%s \n(%s) and got \n%t\n\n", url, target, resp.StatusCode != 404)
-	return resp.StatusCode != 404
-}
-
-//ShouldURLBeParsed checks if the given url is already stored in the database
-func ShouldURLBeParsed(target string) bool {
-	client := &http.Client{}
-	url := couchdbCredentials.URL + "/" + base64.URLEncoding.EncodeToString([]byte(target))
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		log.Errorf("Error parsing url, got: %v\n", err)
-	}
-	req.SetBasicAuth(couchdbCredentials.User, couchdbCredentials.Password)
-	req.Header.Set("User-Agent", "OwlCrawler - https://github.com/fmpwizard/owlcrawler")
-	req.Header.Set("Accept", "application/json")
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Errorf("Error sending request to Couchdb, got: %v\n", err)
-	}
-	resp.Body.Close()
-	log.V(4).Infof(">>>  checking \n%s \n(%s) and got \n%t\n\n", url, target, resp.StatusCode != 404)
-	return resp.StatusCode != 404
+	log.V(4).Infof(">>>  checking %s (%s) and got %d\n", url, target, resp.StatusCode)
+	return resp.StatusCode == 404
 }
 
 //IsItParsed checks if the given url is already parsed
@@ -231,30 +212,26 @@ func IsItParsed(target string) bool {
 
 //IndexStats returns stats related to the index, cnt of parsed/fetched/etc
 func IndexStats() *StatsIndex {
-	return &StatsIndex{
-		parsedCnt(),
-		fetchCnt(),
+	path := "/_design/reports/_view/stats?group=true&group_level=1"
+	var stat couchStatsRet
+	json.Unmarshal(fetchData(path), &stat)
+	ret := &StatsIndex{}
+	for _, value := range stat.Rows {
+		if value.Key == "fetched_on" {
+			ret.Fetched = value.Value
+		}
+		if value.Key == "parsed_on" {
+			ret.Parsed = value.Value
+		}
 	}
+	return ret
 }
 
-func parsedCnt() int {
-	url := couchdbCredentials.URL + "/_design/reports/_view/parsedCnt"
-	var stat couchStatsRet
-	json.Unmarshal(fetchData(url), &stat)
-	return stat.Rows[0].Value
-}
+func fetchData(path string) []byte {
 
-func fetchCnt() int {
-	url := couchdbCredentials.URL + "/_design/reports/_view/fetchdCnt"
-	var stat couchStatsRet
-	json.Unmarshal(fetchData(url), &stat)
-	return stat.Rows[0].Value
-}
-
-func fetchData(url string) []byte {
 	client := &http.Client{}
-	parsedCnt := couchdbCredentials.URL + url
-	req, err := http.NewRequest("GET", parsedCnt, nil)
+	url := couchdbCredentials.URL + path
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		log.Errorf("Error parsing parsedCnt design view, got: %v\n", err)
 	}

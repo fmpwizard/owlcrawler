@@ -5,6 +5,7 @@ import (
 	_ "expvar"
 	"flag"
 	"fmt"
+	"github.com/fmpwizard/owlcrawler/couchdb"
 	"github.com/fmpwizard/owlcrawler/elasticsearch"
 	log "github.com/golang/glog"
 	"github.com/nats-io/nats"
@@ -36,6 +37,12 @@ var gnatsdCredentials gnatsdCred
 
 type gnatsdCred struct {
 	URL string
+}
+
+//IndexStats includes information from our search engine index
+type IndexStats struct {
+	FetchedPages int
+	ParsedPages  int
 }
 
 var rootDir string
@@ -114,7 +121,7 @@ func sanitizeHTML(s string) template.HTML {
 }
 
 func addSiteToIndex(rw http.ResponseWriter, req *http.Request) {
-	term := req.FormValue("url")
+	url := req.FormValue("url")
 	t := template.New("add-site.html")
 	t, err := t.ParseFiles(path.Join(rootDir, "app/add-site.html"))
 	if err != nil {
@@ -131,16 +138,19 @@ func addSiteToIndex(rw http.ResponseWriter, req *http.Request) {
 		}
 		return
 	}
-	pushError := nc.Publish("fetch_url", []byte(term))
-	if pushError != nil {
-		log.Errorf("Error searching, got %v", err)
-		err = t.ExecuteTemplate(rw, "add-site.html", pushError.Error())
-		if err != nil {
-			log.Errorf("Error executing template, got: %s\n", err)
+
+	if url != "" {
+		pushError := nc.Publish("fetch_url", []byte(url))
+		log.Infof("Sending url %s\n", url)
+		log.Infof("Sending []byte url %s\n", []byte(url))
+		if pushError != nil {
+			log.Errorf("Error searching, got %v", err)
+			err = t.ExecuteTemplate(rw, "add-site.html", pushError.Error())
+			if err != nil {
+				log.Errorf("Error executing template, got: %s\n", err)
+			}
+			return
 		}
-		return
-	}
-	if term != "" {
 		err = t.ExecuteTemplate(rw, "add-site.html", "Site submitted")
 		if err != nil {
 			log.Errorf("Error executing template, got: %s\n", err)
@@ -160,7 +170,13 @@ func indexStatus(rw http.ResponseWriter, req *http.Request) {
 		log.Errorf("Error parsing template files: %v", err)
 	}
 	rw.Header().Add("Content-Type", "text/html; charset=UTF-8")
-	err = t.ExecuteTemplate(rw, "index-status.html", "Boom")
+	stats := couchdb.IndexStats()
+	info := &IndexStats{
+		FetchedPages: stats.Fetched,
+		ParsedPages:  stats.Parsed,
+	}
+
+	err = t.ExecuteTemplate(rw, "index-status.html", info)
 	if err != nil {
 		log.Errorf("Error executing template, got: %s\n", err)
 	}

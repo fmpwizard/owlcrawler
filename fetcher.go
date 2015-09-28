@@ -93,6 +93,7 @@ func main() {
 	}
 	for {
 		if payload, err := sub.NextMsg(30 * time.Second); err == nil {
+			log.Info("rere\n")
 			if couchdb.ShouldURLBeFetched(string(payload.Data[:])) {
 				fetchHTML(string(payload.Data[:]))
 			}

@@ -20,7 +20,7 @@ const extractQueue = "extract_url"
 const fetchQueue = "fetch_url"
 
 var fn = func(url string) bool {
-	return !couchdb.ShouldURLBeParsed(url)
+	return couchdb.ShouldURLBeFetched(url)
 }
 var gnatsdCredentials gnatsdCred
 
@@ -80,8 +80,8 @@ func saveExtractedData(doc couchdb.CouchDoc) error {
 
 func getStoredHTMLForDocID(id string) (couchdb.CouchDoc, error) {
 	doc, err := couchdb.GetURLData(id)
-	if err == couchdb.ERROR_404 {
-		return doc, couchdb.ERROR_404
+	if err == couchdb.Error404 {
+		return doc, couchdb.Error404
 	}
 	if err != nil {
 		log.Errorf("Error was: %+v\n", err)

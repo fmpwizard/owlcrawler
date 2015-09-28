@@ -1,3 +1,6 @@
+extractor
+fetcher
+webapp/webapp
 put_msg.sh
 #js stuff
 webapp/owlcrawlerweb/app/bower_components/

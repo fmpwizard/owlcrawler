@@ -70,14 +70,14 @@ var doc1 = `<!DOCTYPE html>
         <div class="col-sm-12">
           <p>Dr. Hayley Bauman is a licensed clinical psychologist in Etowah, North Carolina, central to the Brevard, Hendersonville, and Asheville areas. Dr. Bauman has more than ten years of experience conducting individual, group, couples, and family therapy with clients from a variety of multi-cultural environments and settings. Her extensive background ranges from working in outpatient private practice, to her role as psychologist, team leader, and supervisor for The Renfrew Center, a nationally known eating disorder treatment facility. She is well versed in the areas of eating disorders, body image, self-esteem, depression, anxiety, relationship stress, and transitional issues.</p>
 
-          <p>Dr. Bauman currently practices out of her home, where she uses a psycho-spiritually oriented approach to assist others in resolving uncomfortable issues, so that they may enjoy a greater sense of peace and balance in their lives. Her book, 
+          <p>Dr. Bauman currently practices out of her home, where she uses a psycho-spiritually oriented approach to assist others in resolving uncomfortable issues, so that they may enjoy a greater sense of peace and balance in their lives. Her book,
           <em>Serendipity and the Search for True Self,</em> is a whimsical and warm-hearted journey down the winding road of self-discovery, and may be purchased in many wonderful local stores, or online at <a href="http://store.vervante.com/c/v/V4081308950.html">Vervante.com</a>, <a href="http://search.barnesandnoble.com/Hayley-J-Bauman/e/9781607027676">BarnesandNoble.com</a>, or <a href="http://www.amazon.com/Serendipity-Search-Psy-D-Hayley-Bauman/dp/1607027674">Amazon.com</a>.</p>
-          
+
         </div>
       </div>
 
 
-      
+
 
     </div> <!-- /container -->
 
@@ -100,6 +100,20 @@ var doc1 = `<!DOCTYPE html>
   </body>
 </html>`
 
+var doc2 = `<html><body>
+	<script>
+(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+})(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+ga('create', 'UA-368436-5', 'auto');
+ga('send', 'pageview');
+
+</script>
+</body>
+</html>`
+
 func mockedFetchChecker(url string) bool {
 	return true
 }
@@ -117,8 +131,15 @@ func TestExtractText(t *testing.T) {
 	}
 }
 
+func TestExtractTextNoScript(t *testing.T) {
+	extracted := ExtractText(doc2)
+	if len(extracted.Text) != 0 {
+		t.Errorf("ExtractText extracted script data. It gave: %+v\n", extracted.Text)
+	}
+}
+
 func TestExtractLinks(t *testing.T) {
-	extracted := ExtractLinks(doc1, "http://drhayleybauman.com", mockedFetchChecker)
+	extracted, _ := ExtractLinks(doc1, "http://drhayleybauman.com", mockedFetchChecker)
 	if len(extracted.URL) != 6 {
 		t.Errorf("ExtractLinks didn't give us expected result. It gave: %d urls\n", len(extracted.URL))
 	}
