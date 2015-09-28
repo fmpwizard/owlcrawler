@@ -24,11 +24,11 @@ go build  -tags=extractorExec -o extractor extractor.go
  Sample `.couchdb.json`
 
     ```
-{
-  "user": "user-here",
-  "password": "super-secret-password",
-  "url": "http://localhost:5984/owl-crawler"
-}
+  {
+    "user": "user-here",
+    "password": "super-secret-password",
+    "url": "http://localhost:5984/owl-crawler"
+  }
 
     ```
 
