@@ -84,7 +84,7 @@ func fetchHTML(url string) {
 }
 
 func main() {
-	flag.Parse()
+
 	log.V(2).Infof("Starting Fetcher.")
 	nc, _ := nats.Connect(gnatsdCredentials.URL)
 	sub, err := nc.SubscribeSync(fetchQueue)
@@ -102,6 +102,7 @@ func main() {
 }
 
 func init() {
+	flag.Parse()
 	if u, err := user.Current(); err == nil {
 		path := filepath.Join(u.HomeDir, ".gnatsd.json")
 		content, err := ioutil.ReadFile(path)

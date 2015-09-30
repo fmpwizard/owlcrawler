@@ -1,18 +1,18 @@
 package couchdb
 
 import (
-	"github.com/fmpwizard/owlcrawler/parse"
-	log "github.com/golang/glog"
-	"time"
-
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"flag"
+	"github.com/fmpwizard/owlcrawler/parse"
+	log "github.com/golang/glog"
 	"io/ioutil"
 	"net/http"
 	"os/user"
 	"path/filepath"
+	"time"
 )
 
 var couchdbCredentials couchdbCred
@@ -62,6 +62,7 @@ var ErrorNoLatestVersion = errors.New("Not latest revision.")
 var Error404 = errors.New("Doc not found. ")
 
 func init() {
+	flag.Parse()
 	if u, err := user.Current(); err == nil {
 		path := filepath.Join(u.HomeDir, ".couchdb.json")
 		content, err := ioutil.ReadFile(path)
@@ -74,6 +75,59 @@ func init() {
 			log.Fatalf("Invalid Couchdb credentials file, got: %v\n", err)
 		}
 	}
+	initDesignDocs()
+}
+
+var designSearch = []byte(`
+{
+   "views": {
+       "text": {
+           "map": "function(doc) { \nif ( doc.text.text && doc.text.text.length > 0) {  \n   for(var idx in doc.text.text) {\n\tvar words = doc.text.text[idx].split(\" \")\n\tfor(var idx2 in words) {\n\t\tif(\nwords[idx2].length >2\n\n){\n\t\t\temit(words[idx2], null);\n\t\t}\n\n            \n        }\n}\n\n  \n}\n}"
+       }
+   },
+   "language": "javascript"
+}
+`)
+var designReports = []byte(`
+{
+   "views": {
+       "stats": {
+           "map": "function(doc) { \nif ( doc.parsed_on) {  \n  emit(\"parsed_on\", doc.parsed_on)\n}\nif (doc.fetched_on) {  \n  emit(\"fetched_on\", doc.parsed_on)\n  }}\n",
+           "reduce": "_count"
+       }
+   },
+   "language": "javascript"
+}`)
+
+func initDesignDocs() {
+	if !isDocPresent("_design/reports", false) {
+		saveDesignDoc(designReports, "_design/reports")
+	}
+	if !isDocPresent("_design/search", false) {
+		saveDesignDoc(designSearch, "_design/search")
+	}
+}
+
+func saveDesignDoc(doc []byte, id string) {
+	client := &http.Client{}
+	document := bytes.NewReader(doc)
+	req, err := http.NewRequest("PUT", couchdbCredentials.URL+"/"+id, document)
+	if err != nil {
+		log.Errorf("Error parsing url, got: %v\n", err)
+	}
+	req.SetBasicAuth(couchdbCredentials.User, couchdbCredentials.Password)
+	req.Header.Set("User-Agent", "OwlCrawler - https://github.com/fmpwizard/owlcrawler")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Errorf("Error sending request to Couchdb, got: %v\n", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode == 409 {
+		log.Errorf("%s was created by another request.", id)
+	}
+	log.V(4).Infof("Creating %s view gave status: %v", id, resp.StatusCode)
 }
 
 //AddURLData adds the url and data to the database. data is json encoded.
@@ -183,9 +237,18 @@ func GetURLData(id string) (CouchDoc, error) {
 
 //ShouldURLBeFetched checks if the given url is already stored in the database
 func ShouldURLBeFetched(target string) bool {
+	return !isDocPresent(target, true)
+}
+
+func isDocPresent(target string, encode bool) bool {
 	client := &http.Client{}
-	url := couchdbCredentials.URL + "/" + base64.URLEncoding.EncodeToString([]byte(target))
-	req, err := http.NewRequest("GET", url, nil)
+	url := ""
+	if encode {
+		url = couchdbCredentials.URL + "/" + base64.URLEncoding.EncodeToString([]byte(target))
+	} else {
+		url = couchdbCredentials.URL + "/" + target
+	}
+	req, err := http.NewRequest("HEAD", url, nil)
 	if err != nil {
 		log.Errorf("Error parsing url, got: %v\n", err)
 	}
@@ -197,8 +260,8 @@ func ShouldURLBeFetched(target string) bool {
 		log.Errorf("Error sending request to Couchdb, got: %v\n", err)
 	}
 	resp.Body.Close()
-	log.V(4).Infof(">>>  checking %s (%s) and got %d\n", url, target, resp.StatusCode)
-	return resp.StatusCode == 404
+	log.V(4).Infof("Checking %s (%s) and got %d\n", url, target, resp.StatusCode)
+	return resp.StatusCode != 404
 }
 
 //IsItParsed checks if the given url is already parsed

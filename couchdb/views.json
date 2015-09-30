@@ -13,3 +13,29 @@ http://localhost:5984/owl-crawler/_design/reports/_view/stats?group=true&group_l
    },
    "language": "javascript"
 }
+
+
+{
+   "_id": "_design/search",
+   "views": {
+       "title": {
+           "map": "function(doc) { \nif ( doc.text.title) {  \n   var words = doc.text.title.split(\" \")\n   for (x=0; x < words.length; x++ ){\n     emit(words[x].toLowerCase(), 1)\n   }\n  \n}\n}"
+       },
+       "text": {
+           "map": "function(doc) { \nif ( doc.text.title) {  \n   var words = doc.text.title.split(\" \")\n   for (x=0; x < words.length; x++ ){\n     emit(words[x].toLowerCase(), 1)\n   }\n  \n}\n}"
+       }
+
+   },
+   "language": "javascript"
+}
+
+//http://localhost:5984/owl-crawler/_design/search/_view/stats?limit=5&level=2&group=true&startkey=[%22lift%22]&endkey=[%22lift%22,{}]
+{
+   "_id": "_design/search",
+   "views": {
+       "text": {
+           "map": "function(doc) { \nif ( doc.text.text && doc.text.text.length > 0) {  \n   for(var idx in doc.text.text) {\n\tvar words = doc.text.text[idx].split(\" \")\n\tfor(var idx2 in words) {\n\t\tif(\nwords[idx2].length >2\n\n){\n\t\t\temit(words[idx2], null);\n\t\t}\n\n            \n        }\n}\n\n  \n}\n}"
+       }
+   },
+   "language": "javascript"
+}
