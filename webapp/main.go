@@ -49,7 +49,12 @@ var rootDir string
 
 func init() {
 	currentDir, _ := os.Getwd()
-	flag.StringVar(&rootDir, "root-dir", currentDir, "specifies the root dir where html and other files will be relative to")
+	flag.StringVar(
+		&rootDir,
+		"root-dir",
+		currentDir,
+		"specifies the root dir where html and other files will be relative to",
+	)
 	if u, err := user.Current(); err == nil {
 		path := filepath.Join(u.HomeDir, ".gnatsd.json")
 		content, err := ioutil.ReadFile(path)
@@ -78,6 +83,16 @@ func main() {
 	log.Fatal(http.ListenAndServe(":7070", nil))
 }
 
+func htmlTemplate(name, target string) *template.Template {
+	t := template.New(name)
+	t, err := t.ParseFiles(path.Join(rootDir, target))
+	if err != nil {
+		fmt.Printf("Error parsing template files: %v", err)
+		return nil
+	}
+	return t
+}
+
 func search(rw http.ResponseWriter, req *http.Request) {
 	term := req.FormValue("term")
 	var ret elasticsearch.Result
@@ -85,11 +100,7 @@ func search(rw http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		fmt.Printf("Error searching, got %v", err)
 	}
-	t := template.New("index.html")
-	t, err = t.ParseFiles(path.Join(rootDir, "app/index.html"))
-	if err != nil {
-		fmt.Printf("Error parsing template files: %v", err)
-	}
+	t := htmlTemplate("index.html", "app/index.html")
 	rw.Header().Add("Content-Type", "text/html; charset=UTF-8")
 	var foundSet []*message
 	for _, row := range ret.Hits.Hits {
@@ -122,11 +133,7 @@ func sanitizeHTML(s string) template.HTML {
 
 func addSiteToIndex(rw http.ResponseWriter, req *http.Request) {
 	url := req.FormValue("url")
-	t := template.New("add-site.html")
-	t, err := t.ParseFiles(path.Join(rootDir, "app/add-site.html"))
-	if err != nil {
-		log.Errorf("Error parsing template files: %v", err)
-	}
+	t := htmlTemplate("add-site.html", "app/add-site.html")
 	rw.Header().Add("Content-Type", "text/html; charset=UTF-8")
 
 	nc, err := nats.Connect(gnatsdCredentials.URL)
@@ -141,8 +148,6 @@ func addSiteToIndex(rw http.ResponseWriter, req *http.Request) {
 
 	if url != "" {
 		pushError := nc.Publish("fetch_url", []byte(url))
-		log.Infof("Sending url %s\n", url)
-		log.Infof("Sending []byte url %s\n", []byte(url))
 		if pushError != nil {
 			log.Errorf("Error searching, got %v", err)
 			err = t.ExecuteTemplate(rw, "add-site.html", pushError.Error())
@@ -164,11 +169,7 @@ func addSiteToIndex(rw http.ResponseWriter, req *http.Request) {
 }
 
 func indexStatus(rw http.ResponseWriter, req *http.Request) {
-	t := template.New("index-status.html")
-	t, err := t.ParseFiles(path.Join(rootDir, "app/index-status.html"))
-	if err != nil {
-		log.Errorf("Error parsing template files: %v", err)
-	}
+	t := htmlTemplate("index-status.html", "app/index-status.html")
 	rw.Header().Add("Content-Type", "text/html; charset=UTF-8")
 	stats := couchdb.IndexStats()
 	info := &IndexStats{
@@ -176,7 +177,7 @@ func indexStatus(rw http.ResponseWriter, req *http.Request) {
 		ParsedPages:  stats.Parsed,
 	}
 
-	err = t.ExecuteTemplate(rw, "index-status.html", info)
+	err := t.ExecuteTemplate(rw, "index-status.html", info)
 	if err != nil {
 		log.Errorf("Error executing template, got: %s\n", err)
 	}

@@ -43,6 +43,11 @@ type CouchDocCreated struct {
 	Rev string `json:"rev"`
 }
 
+//NewSite is used to add a new url submitted
+type NewSite struct {
+	URL string `json:"url"`
+}
+
 type couchStatsRet struct {
 	Rows []struct {
 		Key   string `json:"key"`
