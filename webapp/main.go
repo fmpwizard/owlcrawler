@@ -135,36 +135,38 @@ func addSiteToIndex(rw http.ResponseWriter, req *http.Request) {
 	url := req.FormValue("url")
 	t := htmlTemplate("add-site.html", "app/add-site.html")
 	rw.Header().Add("Content-Type", "text/html; charset=UTF-8")
+	if url != "" {
+		saveSubmittedURL(url, rw, t)
+	} else {
+		err := t.ExecuteTemplate(rw, "add-site.html", "")
+		if err != nil {
+			log.Errorf("Error executing template, got: %s\n", err)
+		}
+	}
+}
 
+func saveSubmittedURL(url string, rw http.ResponseWriter, t *template.Template) {
 	nc, err := nats.Connect(gnatsdCredentials.URL)
 	if err != nil {
 		log.Errorf("Could not connect to gnatsd, got: %s\n", err)
-		err = t.ExecuteTemplate(rw, "add-site.html", err.Error())
+		err := t.ExecuteTemplate(rw, "add-site.html", err.Error())
 		if err != nil {
 			log.Errorf("Error executing template, got: %s\n", err)
 		}
 		return
 	}
-
-	if url != "" {
-		pushError := nc.Publish("fetch_url", []byte(url))
-		if pushError != nil {
-			log.Errorf("Error searching, got %v", err)
-			err = t.ExecuteTemplate(rw, "add-site.html", pushError.Error())
-			if err != nil {
-				log.Errorf("Error executing template, got: %s\n", err)
-			}
-			return
-		}
-		err = t.ExecuteTemplate(rw, "add-site.html", "Site submitted")
+	pushError := nc.Publish("fetch_url", []byte(url))
+	if pushError != nil {
+		log.Errorf("Error searching, got %v", err)
+		err := t.ExecuteTemplate(rw, "add-site.html", pushError.Error())
 		if err != nil {
 			log.Errorf("Error executing template, got: %s\n", err)
 		}
-	} else {
-		err = t.ExecuteTemplate(rw, "add-site.html", "")
-		if err != nil {
-			log.Errorf("Error executing template, got: %s\n", err)
-		}
+		return
+	}
+	err = t.ExecuteTemplate(rw, "add-site.html", "Site submitted")
+	if err != nil {
+		log.Errorf("Error executing template, got: %s\n", err)
 	}
 }
 
