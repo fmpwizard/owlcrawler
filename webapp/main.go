@@ -43,6 +43,7 @@ type gnatsdCred struct {
 type IndexStats struct {
 	FetchedPages int
 	ParsedPages  int
+	Sites        []string
 }
 
 var rootDir string
@@ -72,7 +73,7 @@ func init() {
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
-	http.HandleFunc("/", search)
+	http.HandleFunc("/", indexHandler)
 	http.HandleFunc("/index", search)
 	http.HandleFunc("/add-site", addSiteToIndex)
 	http.HandleFunc("/index-status", indexStatus)
@@ -81,6 +82,14 @@ func main() {
 	http.Handle("/scripts/", http.StripPrefix("/scripts/", http.FileServer(http.Dir("app/scripts"))))
 	log.Infoln("Listening on port 7070 ...")
 	log.Fatal(http.ListenAndServe(":7070", nil))
+}
+
+func indexHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	indexStatus(w, r)
 }
 
 func htmlTemplate(name, target string) *template.Template {
@@ -146,6 +155,22 @@ func addSiteToIndex(rw http.ResponseWriter, req *http.Request) {
 }
 
 func saveSubmittedURL(url string, rw http.ResponseWriter, t *template.Template) {
+	data := &couchdb.NewSite{Site: url}
+	payload, err := json.Marshal(data)
+	if err != nil {
+		log.Errorf("Error generating json to save in database, got: %v\n", err)
+	}
+
+	_, err = couchdb.AddURLData(url, payload, true)
+	if err != nil {
+		log.Errorf("Error adding site to db, got: %s\n", err)
+		err := t.ExecuteTemplate(rw, "add-site.html", err.Error())
+		if err != nil {
+			log.Errorf("Error executing template, got: %s\n", err)
+		}
+		return
+	}
+
 	nc, err := nats.Connect(gnatsdCredentials.URL)
 	if err != nil {
 		log.Errorf("Could not connect to gnatsd, got: %s\n", err)
@@ -177,6 +202,7 @@ func indexStatus(rw http.ResponseWriter, req *http.Request) {
 	info := &IndexStats{
 		FetchedPages: stats.Fetched,
 		ParsedPages:  stats.Parsed,
+		Sites:        stats.Sites,
 	}
 
 	err := t.ExecuteTemplate(rw, "index-status.html", info)

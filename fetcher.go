@@ -72,7 +72,7 @@ func fetchHTML(url string) {
 		log.Errorf("Error generating json to save in database, got: %v\n", err)
 	}
 
-	ret, err := couchdb.AddURLData(url, pageData)
+	ret, err := couchdb.AddURLData(url, pageData, false)
 	if err == nil {
 		//Send fethed url to parse queue
 		err := nc.Publish(extractQueue, []byte(ret.ID))

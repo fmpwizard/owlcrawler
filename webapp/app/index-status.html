@@ -59,6 +59,14 @@
           <h3>parsed urls</h3>
         </div>
       </div>
+      <div class="row">
+        <div class="col-sm-12">
+          <ul>
+            {{range .Sites}}<li><h3>{{.}}</h3></li>{{end}}
+          </ul>
+        </div>
+      </div>
+
 
     <!-- build:js(.) scripts/vendor.js -->
     <!-- bower:js -->

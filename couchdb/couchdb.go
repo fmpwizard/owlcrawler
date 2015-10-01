@@ -45,7 +45,7 @@ type CouchDocCreated struct {
 
 //NewSite is used to add a new url submitted
 type NewSite struct {
-	URL string `json:"url"`
+	Site string `json:"site"`
 }
 
 type couchStatsRet struct {
@@ -58,6 +58,7 @@ type couchStatsRet struct {
 //StatsIndex Stats related to the search engine index
 type StatsIndex struct {
 	Parsed, Fetched int
+	Sites           []string
 }
 
 //ERROR_NO_LATEST_VERSION error you get when trying to save an old version of a CouchDB document
@@ -99,7 +100,10 @@ var designReports = []byte(`
        "stats": {
            "map": "function(doc) { \nif ( doc.parsed_on) {  \n  emit(\"parsed_on\", doc.parsed_on)\n}\nif (doc.fetched_on) {  \n  emit(\"fetched_on\", doc.parsed_on)\n  }}\n",
            "reduce": "_count"
-       }
+       },
+			 "sites":{
+			 "map": "function(doc) {  if (doc.site){   emit(doc.site, 1);}}"
+		 }
    },
    "language": "javascript"
 }`)
@@ -136,10 +140,16 @@ func saveDesignDoc(doc []byte, id string) {
 }
 
 //AddURLData adds the url and data to the database. data is json encoded.
-func AddURLData(url string, data []byte) (CouchDocCreated, error) {
+func AddURLData(url string, data []byte, mainURL bool) (CouchDocCreated, error) {
 	client := &http.Client{}
 	document := bytes.NewReader(data)
-	req, err := http.NewRequest("PUT", couchdbCredentials.URL+"/"+base64.URLEncoding.EncodeToString([]byte(url)), document)
+	id := ""
+	if mainURL {
+		id = "site-" + base64.URLEncoding.EncodeToString([]byte(url))
+	} else {
+		id = base64.URLEncoding.EncodeToString([]byte(url))
+	}
+	req, err := http.NewRequest("PUT", couchdbCredentials.URL+"/"+id, document)
 	if err != nil {
 		log.Errorf("Error parsing url, got: %v\n", err)
 	}
@@ -292,6 +302,12 @@ func IndexStats() *StatsIndex {
 			ret.Parsed = value.Value
 		}
 	}
+
+	path = "/_design/reports/_view/sites"
+	json.Unmarshal(fetchData(path), &stat)
+	for _, row := range stat.Rows {
+		ret.Sites = append(ret.Sites, row.Key)
+	}
 	return ret
 }
 
@@ -309,6 +325,9 @@ func fetchData(path string) []byte {
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Errorf("Error sending request to Couchdb parsedCnt view, got: %v\n", err)
+	}
+	if resp.StatusCode != 200 {
+		log.Errorf("Error fetching %s. Status Code was: %d\n", url, resp.StatusCode)
 	}
 	defer resp.Body.Close()
 	body, _ := ioutil.ReadAll(resp.Body)
