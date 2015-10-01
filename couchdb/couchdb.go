@@ -174,7 +174,7 @@ func AddURLData(url string, data []byte, mainURL bool) (CouchDocCreated, error) 
 		log.Errorf("Error serializing from json to a CouchDocCreated, got: %v\n", err)
 	}
 	resp.Body.Close()
-	log.V(3).Infof("AddURLData respose was %+v\n", resp)
+	log.V(4).Infof("AddURLData respose was %+v\n", resp)
 	return ret, nil
 }
 
@@ -208,8 +208,8 @@ func SaveExtractedTextAndLinks(id string, data []byte) (CouchDocCreated, error) 
 		log.Errorf("Error serializing from json to a CouchDocCreated, got: %v\n", err)
 	}
 	defer resp.Body.Close()
-	log.V(3).Infof("SaveExtractedText respose was %+v\n", resp)
-	log.V(3).Infof("Body: %+v\n", string(body))
+	log.V(4).Infof("SaveExtractedText respose was %+v\n", resp)
+	log.V(4).Infof("Body: %+v\n", string(body))
 	return ret, nil
 }
 
@@ -280,17 +280,16 @@ func isDocPresent(target string, encode bool) bool {
 }
 
 //IsItParsed checks if the given url is already parsed
-func IsItParsed(target string) bool {
-	url := couchdbCredentials.URL + "/" + target
+func IsItParsed(path string) bool {
 	var doc CouchDoc
-	json.Unmarshal(fetchData(url), &doc)
-	log.V(4).Infof(">>>  checking \n%s and got \n%t\n\n", url, len(doc.Text.Text) > 0)
+	json.Unmarshal(fetchData(path), &doc)
+	log.V(4).Infof("Checking %s and got %t\n", path, len(doc.Text.Text) > 0)
 	return len(doc.Text.Text) > 0
 }
 
 //IndexStats returns stats related to the index, cnt of parsed/fetched/etc
 func IndexStats() *StatsIndex {
-	path := "/_design/reports/_view/stats?group=true&group_level=1"
+	path := "_design/reports/_view/stats?group=true&group_level=1"
 	var stat couchStatsRet
 	json.Unmarshal(fetchData(path), &stat)
 	ret := &StatsIndex{}
@@ -303,7 +302,7 @@ func IndexStats() *StatsIndex {
 		}
 	}
 
-	path = "/_design/reports/_view/sites"
+	path = "_design/reports/_view/sites"
 	json.Unmarshal(fetchData(path), &stat)
 	for _, row := range stat.Rows {
 		ret.Sites = append(ret.Sites, row.Key)
@@ -312,9 +311,8 @@ func IndexStats() *StatsIndex {
 }
 
 func fetchData(path string) []byte {
-
 	client := &http.Client{}
-	url := couchdbCredentials.URL + path
+	url := couchdbCredentials.URL + "/" + path
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		log.Errorf("Error parsing parsedCnt design view, got: %v\n", err)

@@ -85,16 +85,18 @@ func fetchHTML(url string) {
 
 func main() {
 
-	log.V(2).Infof("Starting Fetcher.")
+	log.V(1).Infof("Starting Fetcher.")
 	nc, _ := nats.Connect(gnatsdCredentials.URL)
-	sub, err := nc.SubscribeSync(fetchQueue)
+	sub, err := nc.QueueSubscribeSync(fetchQueue, "fetch-pool")
 	if err != nil {
 		log.Fatalf("Error while subscribing to fetch_url, got %s\n", err)
 	}
 	for {
 		if payload, err := sub.NextMsg(30 * time.Second); err == nil {
-			log.Info("rere\n")
 			if couchdb.ShouldURLBeFetched(string(payload.Data[:])) {
+				//TODO implement a distributed tick, so you can have 100 fetchers
+				//and you don't all go at the same time, in 5 sec intervals
+				<-time.Tick(5 * time.Second)
 				fetchHTML(string(payload.Data[:]))
 			}
 		}

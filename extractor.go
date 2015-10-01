@@ -95,7 +95,7 @@ func main() {
 	flag.Parse()
 	log.V(2).Infoln("Starting Extractor")
 	nc, _ := nats.Connect(gnatsdCredentials.URL)
-	sub, err := nc.SubscribeSync(extractQueue)
+	sub, err := nc.QueueSubscribeSync(extractQueue, "extractor-pool")
 	if err != nil {
 		log.Fatalf("Error while subscribing to extract_url, got %s\n", err)
 	}
